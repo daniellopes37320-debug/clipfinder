@@ -6,7 +6,7 @@ Outil gratuit et local pour créer des Shorts verticaux (9:16) à partir de **te
 1. Installe [Node.js](https://nodejs.org) (LTS), [Git](https://git-scm.com) et ffmpeg (`winget install Gyan.FFmpeg`).
 2. Dans PowerShell :
    ```
-   git clone https://github.com/<compte>/clipfinder.git
+   git clone https://github.com/daniellopes37320-debug/clipfinder.git
    cd clipfinder
    npm install
    ```
