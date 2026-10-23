@@ -82,6 +82,7 @@ Ne publie que tes vidéos ou celles de partenaires qui t'ont donné leur accord.
 | `ANTHROPIC_API_KEY` / `CLAUDE_MODEL` | Analyse par IA ; vide = analyse gratuite. Si l'IA ne répond pas en 60 s, l'analyse simple prend le relais |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Publication YouTube |
 | `MAX_UPLOAD_GB` | Taille maximale d'une vidéo envoyée (4 par défaut) |
+| `AUTO_BLUR_THRESHOLD` | Cadrage « auto » : si l'action est répartie sur toute l'image (jeu vidéo, interface), l'image entière est gardée sur fond flou au lieu d'être recadrée (0,5 par défaut ; 0 = toujours recadrer ; 1 = toujours image entière) |
 | `KEEP_DAYS` | Supprime les Shorts de plus de N jours (0 = jamais ; les Shorts « à valider » sont gardés) |
 
 ## Dépannage

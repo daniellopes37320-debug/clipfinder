@@ -16,6 +16,10 @@ const FFPROBE = process.env.FFPROBE_PATH || 'ffprobe';
 // face : suit le visage (positions envoyées par le navigateur) ; auto : suit l'action de l'image.
 export const FRAMINGS = ['face', 'auto', 'center', 'left', 'right', 'blur'];
 
+// En dessous de ce taux d'action contenue dans le cadre vertical, on garde toute l'image sur fond flou
+// (réglable avec AUTO_BLUR_THRESHOLD dans .env : 0 = jamais, 1 = toujours).
+const SPREAD_THRESHOLD = Number.isFinite(Number(process.env.AUTO_BLUR_THRESHOLD)) && process.env.AUTO_BLUR_THRESHOLD !== undefined && process.env.AUTO_BLUR_THRESHOLD !== '' ? Number(process.env.AUTO_BLUR_THRESHOLD) : 0.5;
+
 const even = (n) => Math.max(2, 2 * Math.floor(n / 2));
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
@@ -180,6 +184,7 @@ export async function analyzeFraming(input, start, dur, { width, height }) {
   // Meilleure fenêtre verticale, en cumulant ±1 s pour éviter les sautillements.
   const R = FPS;
   const xs = [];
+  const covs = [];
   for (let f = 0; f < n; f++) {
     const S = new Float32Array(GW);
     for (let k = Math.max(0, f - R); k <= Math.min(n - 1, f + R); k++) {
@@ -195,6 +200,14 @@ export async function analyzeFraming(input, start, dur, { width, height }) {
         best = pos;
       }
     }
+    // Part de l'action (détails + mouvement) contenue dans le cadre vertical choisi.
+    let inWin = 0;
+    let all = 0;
+    for (let x = 0; x < GW; x++) {
+      all += S[x];
+      if (x >= best && x < best + cw) inWin += S[x];
+    }
+    covs.push(all > 0 ? inWin / all : 1);
     xs.push(clamp((best * width) / GW, 0, width - cropW));
   }
 
@@ -215,20 +228,29 @@ export async function analyzeFraming(input, start, dur, { width, height }) {
   }
   const sm = fwd.map((v, i) => (v + bwd[i]) / 2);
 
+  // Couverture moyenne : si le cadre vertical ne contient qu'une petite part de l'action
+  // (jeu vidéo avec interface, écran partagé, scène large), recadrer couperait l'essentiel.
+  const coverage = covs.reduce((a, b) => a + b, 0) / covs.length;
+  const finish = (pts) => {
+    pts.coverage = coverage;
+    pts.spread = coverage < SPREAD_THRESHOLD;
+    return pts;
+  };
+
   // Si ça bouge très peu, on garde un cadre fixe.
   if (Math.max(...sm) - Math.min(...sm) < 0.04 * width) {
     const x = even(median(sm));
-    return [
+    return finish([
       { t: 0, x },
       { t: dur, x },
-    ];
+    ]);
   }
 
   let pts = sm.map((x, f) => ({ t: f / FPS, x }));
   pts = rdp(pts, 0.025 * width);
   pts[0].t = 0;
   pts[pts.length - 1].t = dur;
-  return pts.map((p) => ({ t: p.t, x: even(clamp(p.x, 0, width - cropW)) }));
+  return finish(pts.map((p) => ({ t: p.t, x: even(clamp(p.x, 0, width - cropW)) })));
 }
 
 // ---------- Cadrage par détection de visages ----------
@@ -412,6 +434,7 @@ export async function makeShort({ input, start, end, framing, outPath, info, sam
   let used = framing;
   let note = '';
   let plan = { cropWide: cropW, zoom: 1, reason: '' };
+  let blurWhole = false;
 
   try {
     if (framing === 'blur') {
@@ -443,10 +466,24 @@ export async function makeShort({ input, start, end, framing, outPath, info, sam
           }
         }
         if (!points) points = await analyzeFraming(input, start, dur, info);
+        if (points.spread && plan.cropWide <= cropW) {
+          // Action répartie sur toute la largeur (jeu, interface, scène large) : on montre l'image entière sur fond flou.
+          blurWhole = true;
+          used = 'blur';
+          note = [note, "Action répartie sur toute l'image (jeu, interface…) : image entière conservée sur fond flou."].filter(Boolean).join(' ');
+        }
         pans = points.length > 2 ? points.length - 1 : 0;
         xExpr = buildCropX(points);
       }
-      if (plan.cropWide > cropW) {
+      if (blurWhole) {
+        const fc =
+          '[0:v]split=2[a][b];' +
+          '[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=25:5[bg];' +
+          '[b]scale=1080:-2:flags=lanczos[fg];' +
+          `[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1${subs}`;
+        args = fcArgs(fc);
+        pans = 0;
+      } else if (plan.cropWide > cropW) {
         // Plan moyen : zone visible élargie, posée sur un fond flou (marge au-dessus et sur les côtés de la tête).
         const fc =
           `[0:v]crop=${plan.cropWide}:${H}:x='${xExpr}':y=0,split=2[a][b];` +
