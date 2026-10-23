@@ -6,6 +6,7 @@ import { createCutHandlers } from './cut.js';
 import { createPublisher } from './publish.js';
 import { ffmpegAvailable } from './reframe.js';
 import { createAuto } from './auto.js';
+import { cleanOutput } from './cleanup.js';
 import { extractVideoId, fetchSegments, analyzeSegments } from './analysis.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,6 +25,16 @@ const app = express();
 app.use((req, res, next) => {
   const host = String(req.headers.host || '').replace(/:\d+$/, '').toLowerCase();
   if (!['localhost', '127.0.0.1', '[::1]'].includes(host)) return res.status(403).send('Accès refusé.');
+  next();
+});
+// Refuse les requêtes d'écriture venant d'un autre site (protection CSRF) : seul le site ClipFinder lui-même peut agir.
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    const site = req.headers['sec-fetch-site'];
+    if (site && site !== 'same-origin' && site !== 'none') return res.status(403).send('Requête refusée.');
+    const origin = req.headers.origin;
+    if (origin && !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(origin)) return res.status(403).send('Requête refusée.');
+  }
   next();
 });
 app.use(express.json({ limit: '1mb' }));
@@ -45,6 +56,12 @@ const cutter = createCutHandlers({
   apiKey: API_KEY,
   model: MODEL,
 });
+// Nettoyage facultatif : KEEP_DAYS=30 supprime les Shorts de plus de 30 jours (sauf ceux encore « à valider »).
+const keepDays = Number(process.env.KEEP_DAYS) || 0;
+if (keepDays > 0) {
+  const n = cleanOutput({ outputDir: cutter.outputDir, stateFile: path.join(__dirname, 'queue.json'), days: keepDays });
+  if (n) console.log(`Nettoyage : ${n} ancien(s) Short(s) supprimé(s) (plus de ${keepDays} jours).`);
+}
 const publisher = createPublisher({ baseDir: __dirname, outputDir: cutter.outputDir, port: PORT });
 
 // Dépôt automatique : les vidéos glissées dans le dossier « inbox » donnent des Shorts « à valider » (jamais publiés seuls)
@@ -62,6 +79,7 @@ app.post('/api/queue/reject', auto.reject);
 app.post('/api/queue/done', auto.done);
 app.post('/api/queue/reframe', auto.reframe);
 app.post('/api/queue/delete-source', auto.deleteSource);
+app.post('/api/queue/retry', auto.retry);
 app.get('/api/queue/source/:id', (req, res) => {
   const p = auto.sourcePath(req.params.id);
   if (!p) return res.status(404).end();
@@ -133,6 +151,7 @@ app.post('/api/analyze', async (req, res) => {
       hasTranscript: true,
       totalSeconds: Math.round(r.totalSeconds),
       summary: r.summary,
+      notice: r.notice || '',
       clips: r.clips,
     });
   } catch (e) {

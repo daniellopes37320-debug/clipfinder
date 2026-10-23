@@ -69,5 +69,26 @@ Notes : publication en **privé** par défaut. À ma connaissance, un projet Goo
 ## Droits
 Ne publie que tes vidéos ou celles de partenaires qui t'ont donné leur accord.
 
+## Réglages (`.env`, tous facultatifs)
+| Variable | Rôle |
+|---|---|
+| `PORT` | Port du site (3000 par défaut ; si tu changes, mets aussi l'URI de redirection Google à jour) |
+| `ANTHROPIC_API_KEY` / `CLAUDE_MODEL` | Analyse par IA ; vide = analyse gratuite. Si l'IA ne répond pas en 60 s, l'analyse simple prend le relais |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Publication YouTube |
+| `MAX_UPLOAD_GB` | Taille maximale d'une vidéo envoyée (4 par défaut) |
+| `KEEP_DAYS` | Supprime les Shorts de plus de N jours (0 = jamais ; les Shorts « à valider » sont gardés) |
+
+## Dépannage
+- **« ffmpeg est introuvable »** : `winget install Gyan.FFmpeg`, puis ferme et rouvre PowerShell.
+- **`redirect_uri_mismatch`** (Google) : l'URI doit être exactement `http://localhost:3000/oauth/callback` dans Google Cloud.
+- **La connexion YouTube expire au bout de 7 jours** : écran de consentement en mode « Test » ; reconnecte-toi ou passe-le en production.
+- **Les vidéos publiées restent privées** : normal pour un projet Google non validé ; change la visibilité dans YouTube Studio.
+- **Pas de visage détecté** : le modèle de détection se charge depuis Internet ; sans connexion le cadrage « suit l'action » est utilisé.
+- **Un fichier de l'inbox est en erreur** : clique sur « Réessayer les fichiers en erreur » dans l'onglet À valider.
+- **Port déjà utilisé** : ferme l'autre fenêtre ClipFinder ou change `PORT`.
+
+## Développement
+`npm run check` (syntaxe) et `npm test` (tests, Node ≥ 18). Une vérification automatique tourne sur GitHub à chaque envoi.
+
 ## Sécurité
-Le serveur n'écoute que sur ton PC (127.0.0.1). Ne partage jamais `.env` ni `youtube-token.json`.
+Le serveur n'écoute que sur ton PC (127.0.0.1) et refuse les requêtes venant d'autres sites. L'envoi sur YouTube exige la case « J'ai l'autorisation ». Ne partage jamais `.env` ni `youtube-token.json`.

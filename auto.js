@@ -229,6 +229,21 @@ export function createAuto({ baseDir, outputDir, inboxDir, apiKey = '', model = 
     json(res, 200, { items, sources, inboxDir, scanning: Boolean(current), current, errors });
   }
 
+  // Relance les fichiers qui avaient échoué (ex. ffmpeg manquant au premier essai).
+  function retry(req, res) {
+    let n = 0;
+    for (const k of Object.keys(state.done)) {
+      if (state.done[k]?.error) {
+        delete state.done[k];
+        n++;
+      }
+    }
+    errors.length = 0;
+    save();
+    scan({ quick: true }).catch((e) => console.error(e));
+    json(res, 200, { ok: true, retried: n });
+  }
+
   function scanNow(req, res) {
     scan({ quick: true }).catch((e) => console.error(e));
     json(res, 200, { ok: true });
@@ -329,5 +344,5 @@ export function createAuto({ baseDir, outputDir, inboxDir, apiKey = '', model = 
     }
   }
 
-  return { start, stop, scan, list, scanNow, reject, done, reframe, deleteSource, sourcePath, inboxDir };
+  return { start, stop, scan, list, scanNow, retry, reject, done, reframe, deleteSource, sourcePath, inboxDir };
 }

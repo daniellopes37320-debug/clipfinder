@@ -217,7 +217,8 @@ export function createPublisher({ baseDir, outputDir, port, env = process.env })
       if (!configured) {
         return json(res, 400, { error: "La publication YouTube n'est pas configurée (voir le README)." });
       }
-      const { name, title, description = '', privacy = 'private' } = req.body || {};
+      const { name, title, description = '', privacy = 'private', rightsConfirmed = false } = req.body || {};
+      if (rightsConfirmed !== true) return json(res, 400, { error: "Confirmez que vous avez le droit de publier cette vidéo (case « J'ai l'autorisation »)." });
       if (!/^short-[a-z0-9-]+\.mp4$/.test(String(name))) return json(res, 400, { error: 'Fichier inconnu.' });
       const file = path.join(outputDir, name);
       if (!fs.existsSync(file)) return json(res, 404, { error: 'Ce Short est introuvable dans le dossier output.' });

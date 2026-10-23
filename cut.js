@@ -16,6 +16,8 @@ import { finalizeClips, relabel, analyzeSegments } from './analysis.js';
 
 const VIDEO_EXT = new Set(['.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v']);
 const MAX_CLIP_SECONDS = 120;
+// Taille maximale d'un fichier envoyé (réglable avec MAX_UPLOAD_GB dans .env, 4 Go par défaut).
+const MAX_UPLOAD_BYTES = (Number(process.env.MAX_UPLOAD_GB) > 0 ? Number(process.env.MAX_UPLOAD_GB) : 4) * 1024 ** 3;
 
 function json(res, code, obj) {
   res.statusCode = code;
@@ -73,6 +75,12 @@ export function createCutHandlers({ baseDir, getSegments = () => undefined, setS
       return json(res, 400, { error: 'Format non pris en charge (mp4, mov, mkv, webm, avi, m4v).' });
     }
 
+    const declared = Number(req.headers['content-length']);
+    if (declared > MAX_UPLOAD_BYTES) {
+      req.resume();
+      return json(res, 413, { error: `Fichier trop gros (maximum ${Math.round(MAX_UPLOAD_BYTES / 1024 ** 3)} Go, réglable avec MAX_UPLOAD_GB dans .env).` });
+    }
+
     const id = randomBytes(4).toString('hex');
     uploadNames.set(id, name.slice(0, 200));
     if (uploadNames.size > 100) uploadNames.delete(uploadNames.keys().next().value);
@@ -87,6 +95,15 @@ export function createCutHandlers({ baseDir, getSegments = () => undefined, setS
       if (!res.headersSent) json(res, code, { error: msg });
     };
 
+    let received = 0;
+    req.on('data', (chunk) => {
+      received += chunk.length;
+      if (received > MAX_UPLOAD_BYTES) {
+        req.unpipe(ws);
+        abort(413, 'Fichier trop gros (voir MAX_UPLOAD_GB dans .env).');
+        req.resume();
+      }
+    });
     req.on('error', () => abort(400, 'Envoi interrompu.'));
     req.on('aborted', () => abort(400, 'Envoi interrompu.'));
     ws.on('error', (e) => abort(500, "Impossible d'écrire le fichier : " + e.message));

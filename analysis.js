@@ -118,9 +118,12 @@ Réponds UNIQUEMENT avec du JSON valide, sans texte autour, au format :
 Donne entre 3 et 6 clips, classés du meilleur au moins bon, sans chevauchement.
 Écris les titres et explications dans la langue de la vidéo.`;
 
+const CLAUDE_TIMEOUT_MS = 60_000;
+
 async function askClaude({ apiKey, model, transcriptText, totalSeconds, targetSeconds }) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
+    signal: AbortSignal.timeout(CLAUDE_TIMEOUT_MS),
     headers: {
       'content-type': 'application/json',
       'x-api-key': apiKey,
@@ -150,7 +153,11 @@ async function askClaude({ apiKey, model, transcriptText, totalSeconds, targetSe
   const first = text.indexOf('{');
   const last = text.lastIndexOf('}');
   if (first === -1 || last === -1) throw new Error('Réponse inattendue du modèle.');
-  return JSON.parse(text.slice(first, last + 1));
+  try {
+    return JSON.parse(text.slice(first, last + 1));
+  } catch {
+    throw new Error('Réponse du modèle illisible (JSON invalide).');
+  }
 }
 
 // Recalcule les champs d'affichage d'un extrait après un changement de début/fin.
@@ -219,13 +226,24 @@ export async function analyzeSegments({ segments, videoId, targetSeconds = 40, a
   if (transcriptText.length > 180000) transcriptText = transcriptText.slice(0, 180000);
 
   // Sans clé API : analyse simple et gratuite. Avec clé : analyse par Claude.
-  const mode = apiKey ? 'ai' : 'simple';
-  const result = apiKey
-    ? await askClaude({ apiKey, model, transcriptText, totalSeconds, targetSeconds: target })
-    : findClipsSimple(segments, totalSeconds, 5, target, energy);
+  let mode = apiKey ? 'ai' : 'simple';
+  let notice = '';
+  let result;
+  if (apiKey) {
+    try {
+      result = await askClaude({ apiKey, model, transcriptText, totalSeconds, targetSeconds: target });
+    } catch (e) {
+      // Claude indisponible (réseau, quota, délai dépassé) : on bascule sur l'analyse gratuite au lieu d'échouer.
+      console.warn('Analyse Claude impossible, repli sur l\'analyse simple :', e.message);
+      mode = 'simple';
+      notice = 'Analyse IA indisponible (' + (e.name === 'TimeoutError' ? 'délai dépassé' : e.message.slice(0, 120)) + ') : analyse simple utilisée.';
+    }
+  }
+  if (!result) result = findClipsSimple(segments, totalSeconds, 5, target, energy);
 
   return {
     mode,
+    notice,
     totalSeconds,
     summary: String(result.video_summary || ''),
     clips: finalizeClips(result.clips, { videoId, totalSeconds, segments, minDur: Math.max(10, target * 0.35), meta }),
