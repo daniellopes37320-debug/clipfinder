@@ -41,15 +41,14 @@ Analyse gratuite par défaut. `ANTHROPIC_API_KEY` dans `.env` = IA payante, facu
 - **Cadrage « visage » aéré** : si le visage est trop gros (gros plan), le site élargit la zone visible (plan moyen, fond flou en haut et en bas). Il dézoome davantage si la personne bouge vite ou s'il y a plusieurs visages. Un plan déjà moyen reste inchangé.
 - **Choix des moments** : avec un fichier vidéo, le score combine le texte (accroches, mots forts) et le son (début dynamique, pics de voix, volume expressif). Le temps mort au début et à la fin est coupé. La hauteur de la voix n'est pas mesurée : les changements de ton sont estimés par les variations de volume.
 
-## Titres et descriptions par IA gratuite (facultatif)
-Sans réglage, ClipFinder écrit des titres simples à partir de règles. Pour des titres plus accrocheurs, des descriptions naturelles et de bons hashtags, branche l'IA gratuite **Google Gemini** :
-1. Va sur [aistudio.google.com/apikey](https://aistudio.google.com/apikey), connecte-toi et crée une clé (gratuite, sans carte bancaire).
-2. Dans `.env`, remplis `GEMINI_API_KEY=` avec cette clé (sans espaces ni guillemets).
-3. Si Google renomme le modèle et que tu vois « modèle introuvable », mets le nom actuel dans `GEMINI_MODEL=`.
-4. Ferme et relance ClipFinder : le démarrage affiche « Titres par IA gratuite ».
+## Connexions : IA et YouTube (dans le site)
+Tout se règle dans l'onglet **Connexions**, sans toucher aux fichiers : les clés sont enregistrées sur ton PC (fichier `.env`), jamais envoyées ailleurs qu'au service concerné, et jamais réaffichées en entier.
+- **Gemini (gratuit)** : crée une clé sur [aistudio.google.com/apikey](https://aistudio.google.com/apikey), colle-la, clique sur **Enregistrer** puis **Tester**. Si Google renomme le modèle (« modèle introuvable »), change le nom dans le champ Modèle.
+- **Claude (payant, facultatif)** : même principe. Une case permet de l'utiliser aussi pour trouver les meilleurs moments.
+- **IA utilisée pour les titres** : Automatique, Gemini, Claude ou Aucune (titres simples). Les titres restent fidèles au contenu et sont écrits dans la langue de la vidéo.
+- **YouTube** : colle l'ID client et le code secret Google, puis clique sur **Connecter ma chaîne YouTube** (marche à suivre plus bas).
 
-Les titres restent fidèles au contenu de l'extrait (pas de promesse trompeuse). Une seule requête est envoyée par analyse, pour rester dans les limites gratuites. Si l'IA ne répond pas ou si le quota gratuit est atteint, les titres simples sont utilisés et un message l'indique.
-Les textes des extraits (sous-titres) sont envoyés à Google pour rédiger les titres : n'active cette option que pour des vidéos que tu peux partager avec ce service.
+Les textes des extraits (sous-titres) sont envoyés au service d'IA choisi pour rédiger les titres : n'active cette option que pour des vidéos que tu peux partager avec lui. Si l'IA ne répond pas ou si le quota est atteint, des titres simples sont utilisés et un message l'indique.
 
 ## Titres et descriptions automatiques
 Le site propose un titre (et 2 à 3 autres idées, cliquables) et une description complète : accroche, « Extrait de … », lien vers la vidéo complète (avec un lien YouTube), appel à s'abonner et hashtags.
@@ -66,8 +65,8 @@ Place un fichier `logo.png` (fond transparent, de préférence carré) à côté
 3. **Écran de consentement OAuth** (ou « Google Auth Platform ») : type **Externe**, renseigne un nom d'appli et ton e-mail.
 4. Dans la section **Audience** → **Utilisateurs test** → **Add users** : ajoute **ton adresse Gmail** (celle de ta chaîne YouTube) et enregistre. *Sans cette étape, Google affiche « Accès bloqué : erreur 403 access_denied ».*
 5. **Identifiants** → Créer des identifiants → **ID client OAuth** → type **Application Web**. Dans « URI de redirection autorisés », ajoute exactement : `http://localhost:3000/oauth/callback`.
-6. Copie l'**ID client** et le **code secret**. Dans `C:\clipfinder`, copie `.env.example`, renomme la copie `.env`, ouvre-la avec le Bloc-notes et remplis `GOOGLE_CLIENT_ID=` et `GOOGLE_CLIENT_SECRET=` (sans espaces ni guillemets). Enregistre, ferme ClipFinder et relance-le.
-7. Dans le site, clique sur **Connecter ma chaîne YouTube** (en haut de l'onglet Créer). Si Google affiche « Google n'a pas validé cette appli », clique sur **Paramètres avancés** → **Accéder à … (non sécurisé)** : c'est ton propre projet.
+6. Copie l'**ID client** et le **code secret**, puis colle-les dans l'onglet **Connexions** du site (carte « Compte YouTube ») et clique sur **Enregistrer**.
+7. Dans le site, clique sur **Connecter ma chaîne YouTube** (onglet Connexions). Si Google affiche « Google n'a pas validé cette appli », clique sur **Paramètres avancés** → **Accéder à … (non sécurisé)** : c'est ton propre projet.
 8. Avant de publier, coche « J'ai l'autorisation ».
 
 Notes : publication en **privé** par défaut. À ma connaissance, un projet Google non vérifié garde les vidéos privées, et la connexion en mode test peut expirer après ~7 jours (reconnecte-toi). Quota limité par jour.

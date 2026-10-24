@@ -18,3 +18,34 @@ export function loadEnv(file) {
     if (v !== '' && process.env[m[1]] === undefined) process.env[m[1]] = v;
   }
 }
+
+// Enregistre des réglages dans le fichier .env (crée le fichier si besoin) et les applique tout de suite.
+// updates : { CLE: 'valeur' } ; une valeur vide efface la ligne. Les autres lignes et commentaires sont conservés.
+export function saveEnv(file, updates) {
+  let text = '';
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch {
+    /* premier enregistrement */
+  }
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text === '' ? [] : text.split(/\r?\n/);
+  for (const [key, value] of Object.entries(updates)) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new Error('Nom de réglage invalide.');
+    if (/[\r\n\0]/.test(String(value))) throw new Error('Valeur invalide.');
+    const re = new RegExp(`^\\s*${key}\\s*=`);
+    const i = lines.findIndex((l) => re.test(l) && !l.trim().startsWith('#'));
+    const line = `${key}=${value}`;
+    if (i >= 0) lines[i] = line;
+    else {
+      while (lines.length && lines[lines.length - 1] === '') lines.pop();
+      lines.push(line);
+    }
+    if (value === '') delete process.env[key];
+    else process.env[key] = String(value);
+  }
+  const out = lines.join(eol).replace(new RegExp(`(${eol})*$`), '') + eol;
+  const tmp = file + '.tmp';
+  fs.writeFileSync(tmp, out, { mode: 0o600 });
+  fs.renameSync(tmp, file);
+}

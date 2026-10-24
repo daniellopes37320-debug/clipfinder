@@ -24,19 +24,35 @@ const clean = (s) =>
 const cutTo = (s, n) => (s.length <= n ? s : s.slice(0, n - 1).replace(/\s+\S*$/, '') + '…');
 const tagOf = (s) => clean(s).replace(/^#+/, '').replace(/[^\p{L}\p{N}_]/gu, '').slice(0, 30);
 
-export async function askGemini({ apiKey, model = DEFAULT_GEMINI_MODEL, videoTitle = '', channel = '', clips }) {
-  const user =
+function userPrompt({ videoTitle, channel, clips }) {
+  return (
     `Vidéo d'origine : « ${clean(videoTitle) || 'inconnue'} »${channel ? ` (chaîne : ${clean(channel)})` : ''}\n\n` +
     'Extraits :\n' +
-    clips.map((c, i) => `#${i} (${Math.round(c.start)}s → ${Math.round(c.end)}s) texte : ${c.text ? '« ' + cutTo(clean(c.text), 700) + ' »' : '(aucun texte)'}`).join('\n');
+    clips.map((c, i) => `#${i} (${Math.round(c.start)}s → ${Math.round(c.end)}s) texte : ${c.text ? '« ' + cutTo(clean(c.text), 700) + ' »' : '(aucun texte)'}`).join('\n')
+  );
+}
 
+function parseClips(text, who) {
+  const a = text.indexOf('{');
+  const b = text.lastIndexOf('}');
+  if (a < 0 || b < 0) throw new Error(`Réponse ${who} inattendue.`);
+  let json;
+  try {
+    json = JSON.parse(text.slice(a, b + 1));
+  } catch {
+    throw new Error(`Réponse ${who} illisible (JSON invalide).`);
+  }
+  return Array.isArray(json.clips) ? json.clips : [];
+}
+
+export async function askGemini({ apiKey, model = DEFAULT_GEMINI_MODEL, videoTitle = '', channel = '', clips }) {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',
     signal: AbortSignal.timeout(TIMEOUT_MS),
     headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM }] },
-      contents: [{ role: 'user', parts: [{ text: user }] }],
+      contents: [{ role: 'user', parts: [{ text: userPrompt({ videoTitle, channel, clips }) }] }],
       generationConfig: { temperature: 0.9, maxOutputTokens: 4000, responseMimeType: 'application/json' },
     }),
   });
@@ -46,30 +62,37 @@ export async function askGemini({ apiKey, model = DEFAULT_GEMINI_MODEL, videoTit
     throw new Error(`Gemini ${res.status}${hint} : ${body.slice(0, 160)}`);
   }
   const data = await res.json();
-  const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
-  const a = text.indexOf('{');
-  const b = text.lastIndexOf('}');
-  if (a < 0 || b < 0) throw new Error('Réponse Gemini inattendue.');
-  let json;
-  try {
-    json = JSON.parse(text.slice(a, b + 1));
-  } catch {
-    throw new Error('Réponse Gemini illisible (JSON invalide).');
+  return parseClips((data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join(''), 'Gemini');
+}
+
+export async function askClaudeTitles({ apiKey, model = 'claude-sonnet-5-5', videoTitle = '', channel = '', clips }) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+    headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model, max_tokens: 3000, system: SYSTEM, messages: [{ role: 'user', content: userPrompt({ videoTitle, channel, clips }) }] }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    const hint = res.status === 404 ? ' (modèle introuvable : change CLAUDE_MODEL)' : res.status === 429 ? ' (trop de requêtes)' : '';
+    throw new Error(`Claude ${res.status}${hint} : ${body.slice(0, 160)}`);
   }
-  return Array.isArray(json.clips) ? json.clips : [];
+  const data = await res.json();
+  return parseClips((data.content || []).map((b) => b.text || '').join(''), 'Claude');
 }
 
 // Applique les propositions de l'IA aux extraits déjà calculés. Renvoie { clips, notice }.
-export async function enhanceClips(clips, { segments = null, videoTitle = '', channel = '', name = '', link = '', ai = null, ask = askGemini }) {
+export async function enhanceClips(clips, { segments = null, videoTitle = '', channel = '', name = '', link = '', ai = null, ask = null }) {
   if (!ai?.apiKey || !clips.length) return { clips, notice: '' };
   const items = clips.map((c) => ({
     start: c.start,
     end: c.end,
     text: segments ? segments.filter((s) => s.start >= c.start - 1 && s.start < c.end).map((s) => s.text).join(' ') : '',
   }));
+  const askFn = ask || (ai.provider === 'claude' ? askClaudeTitles : askGemini);
   let out;
   try {
-    out = await ask({ apiKey: ai.apiKey, model: ai.model || DEFAULT_GEMINI_MODEL, videoTitle: videoTitle || name, channel, clips: items });
+    out = await askFn({ apiKey: ai.apiKey, model: ai.model || (ai.provider === 'claude' ? 'claude-sonnet-5-5' : DEFAULT_GEMINI_MODEL), videoTitle: videoTitle || name, channel, clips: items });
   } catch (e) {
     console.warn('Titres par IA impossibles, titres simples conservés :', e.message);
     return { clips, notice: 'Titres IA indisponibles (' + (e.name === 'TimeoutError' ? 'délai dépassé' : clean(e.message).slice(0, 110)) + ') : titres simples utilisés.' };

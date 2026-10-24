@@ -27,7 +27,7 @@ function json(res, code, obj) {
 
 // getSegments(clé) -> transcription mise en cache par le serveur (ou undefined)
 // setSegments(clé, segments) -> la garde en mémoire (sous-titres importés avec un fichier)
-export function createCutHandlers({ baseDir, getSegments = () => undefined, setSegments = () => {}, apiKey = '', model = '', titleAI = null }) {
+export function createCutHandlers({ baseDir, getSegments = () => undefined, setSegments = () => {}, apiKey = '', model = '', titleAI = null, getAI = null }) {
   const tmpDir = path.join(baseDir, 'tmp');
   const outputDir = path.join(baseDir, 'output');
   fs.mkdirSync(tmpDir, { recursive: true });
@@ -230,7 +230,8 @@ export function createCutHandlers({ baseDir, getSegments = () => undefined, setS
       }
 
       if (segments) {
-        const r = await analyzeSegments({ segments, videoId: null, targetSeconds: T, apiKey, model, energy, meta: { name: uploadNames.get(uploadId) || '' }, titleAI });
+        const ai = getAI ? getAI() : { apiKey, model, titleAI };
+        const r = await analyzeSegments({ segments, videoId: null, targetSeconds: T, apiKey: ai.apiKey, model: ai.model, energy, meta: { name: uploadNames.get(uploadId) || '' }, titleAI: ai.titleAI });
         if (r.clips.length) {
           const clips = (energy ? refineClips(r.clips, energy) : r.clips).map((c) => relabel(c, null));
           const captionKey = `file:${uploadId}`;
