@@ -198,8 +198,6 @@
     .tab { background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); font: inherit; font-size: 15px; font-weight: 600; padding: 12px 16px; cursor: pointer; white-space: nowrap; }
     .tab:hover { color: var(--text); }
     .tab.on { color: var(--text); border-bottom-color: var(--accent); }
-    .badge:not(:empty) { display: inline-block; min-width: 20px; padding: 1px 7px; border-radius: 99px; background: var(--accent); color: #fff; font-size: 12px; text-align: center; }
-    .src-h { font-size: 14px; color: var(--muted); margin: 18px 0 8px; }
     .src-row { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; font-size: 13px; }
     .ideas { display: flex; flex-direction: column; gap: 6px; margin: -4px 0 12px; align-items: flex-start; }
     .idea { text-align: left; font: inherit; font-size: 13px; color: var(--text); background: var(--panel-2); border: 1px dashed var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer; max-width: 100%; }
@@ -220,9 +218,8 @@
     </header>
 
     <nav class="tabs" id="tabs">
-      <button type="button" class="tab on" data-tab="create">1 · Créer un Short</button>
-      <button type="button" class="tab" data-tab="queue">2 · À valider <span class="badge" id="tabQueueCount"></span></button>
-      <button type="button" class="tab" data-tab="history">3 · Mes Shorts</button>
+      <button type="button" class="tab on" data-tab="create">Créer un Short</button>
+      <button type="button" class="tab" data-tab="history">Mes Shorts</button>
     </nav>
 
     <div class="panel" id="panel-create">
@@ -314,15 +311,6 @@
         </div>
       </div>
     </section>
-    </div>
-
-    <div class="panel" id="panel-queue" hidden>
-      <p class="rights">Glisse une vidéo (et son .srt/.vtt du même nom, facultatif) dans le dossier <b id="inboxPath">inbox</b> : les meilleurs Shorts apparaissent ici. Rien n'est publié sans ta validation.</p>
-      <div class="yt-bar" id="ytBar2">YouTube…</div>
-      <button type="button" class="ghost" id="queueScan">Chercher maintenant</button>
-      <div class="maker-status" id="queueStatus"></div>
-      <div id="sources"></div>
-      <div id="queue"></div>
     </div>
 
     <div class="panel" id="panel-history" hidden>
@@ -757,7 +745,7 @@
       } else {
         html = `YouTube connecté${yt.channel ? ' : <b>' + esc(yt.channel) + '</b>' : ''}. <button type="button" class="linkbtn yt-off">Déconnecter</button>`;
       }
-      for (const bar of [$('ytBar'), $('ytBar2')]) {
+      for (const bar of [$('ytBar')]) {
         bar.innerHTML = html;
         const off = bar.querySelector('.yt-off');
         if (off) off.addEventListener('click', async () => {
@@ -911,105 +899,6 @@
       $('subsName').textContent = f ? f.name + ' (sera utilisé pour le prochain fichier)' : '';
     });
 
-    // ---------- À valider (dépôt automatique) ----------
-    let srcSig = null;
-    function renderSources(list) {
-      const sig = JSON.stringify(list.map((s) => [s.name, s.size, s.shorts]));
-      if (sig === srcSig) return;
-      srcSig = sig;
-      const box = $('sources');
-      box.innerHTML = list.length ? '<h3 class="src-h">Vidéos dans inbox</h3>' : '';
-      for (const s of list) {
-        const row = document.createElement('div');
-        row.className = 'src-row';
-        row.innerHTML = `<span><b>${esc(s.name)}</b> · ${(s.size / 1048576).toFixed(0)} Mo · ${s.shorts} Short${s.shorts > 1 ? 's' : ''}</span> <button type="button" class="ghost">Supprimer la vidéo</button>`;
-        row.querySelector('button').addEventListener('click', async () => {
-          if (!confirm(`Supprimer « ${s.name} » du dossier inbox ?\nLes Shorts déjà créés sont gardés, mais « Recadrer sur le visage » ne marchera plus pour eux.`)) return;
-          try {
-            await post('/api/queue/delete-source', { name: s.name });
-            srcSig = null;
-            loadQueue();
-          } catch (err) {
-            alert(err.message);
-          }
-        });
-        box.append(row);
-      }
-    }
-    let queueSig = null;
-    async function loadQueue() {
-      try {
-        const q = await (await fetch('/api/queue')).json();
-        $('inboxPath').textContent = q.inboxDir;
-        $('tabQueueCount').textContent = q.items.length || '';
-        $('queueStatus').innerHTML = (q.scanning ? '<span class="spinner"></span>Traitement de ' + esc(q.current) + '…' : '') +
-          q.errors.map((e) => `<div class="res-note">${esc(e.file)} : ${esc(e.message)}</div>`).join('') +
-          (q.errors.length ? '<button type="button" class="ghost" id="retryBtn">Réessayer les fichiers en erreur</button>' : '');
-        const rb = $('retryBtn');
-        if (rb) rb.onclick = async () => { rb.disabled = true; await post('/api/queue/retry', {}); loadQueue(); };
-        renderSources(q.sources || []);
-        const box = $('queue');
-        // Ne reconstruit la liste que si elle a changé : sinon les vidéos en lecture repartent de zéro.
-        const sig = q.items.map((i) => i.id).join(',');
-        if (sig === queueSig) return q;
-        queueSig = sig;
-        box.innerHTML = '';
-        for (const it of q.items) {
-          const el = addResult({ url: it.url, name: it.name }, {
-            title: it.title,
-            description: it.description,
-            titles: it.titles,
-            note: `Source : ${it.source}${it.captions ? ' · sous-titres incrustés' : ''} · score ${it.score}`,
-          }, box);
-          const row = document.createElement('div');
-          row.className = 'maker-actions';
-          row.innerHTML = '<button type="button" class="ghost q-face">Recadrer sur le visage</button> <button type="button" class="ghost q-done">Marquer comme publié</button> <button type="button" class="ghost q-del">Refuser (supprimer)</button>';
-          row.querySelector('.q-face').addEventListener('click', async (ev) => {
-            const b = ev.currentTarget;
-            if (busy) return;
-            busy = true;
-            b.disabled = true;
-            const msg = (t, spin) => { b.textContent = t; };
-            try {
-              sampler.src = '/api/queue/source/' + it.id;
-              sampler.load();
-              const samples = await sampleFaces(it.start, it.end, (k, n) => msg(`Détection du visage… ${k}/${n}`));
-              msg('Création du Short…');
-              const r = await post('/api/queue/reframe', { id: it.id, samples });
-              queueSig = null;
-              await loadQueue();
-              if (r.note) alert(r.note);
-            } catch (err) {
-              b.disabled = false;
-              b.textContent = 'Recadrer sur le visage';
-              alert('Recadrage impossible : ' + err.message);
-            } finally {
-              busy = false;
-            }
-          });
-          row.querySelector('.q-done').addEventListener('click', async () => { await post('/api/queue/done', { id: it.id }); loadQueue(); });
-          row.querySelector('.q-del').addEventListener('click', async () => {
-            if (!confirm('Supprimer ce Short ?')) return;
-            await post('/api/queue/reject', { id: it.id });
-            loadQueue();
-            loadHistory();
-          });
-          el.append(row);
-        }
-        if (!q.items.length && !q.scanning) box.innerHTML = '<p class="rights">Rien à valider pour l\'instant.</p>';
-        return q;
-      } catch (e) {
-        $('queueStatus').textContent = "Impossible de lire la liste.";
-      }
-    }
-    $('queueScan').addEventListener('click', async () => {
-      await post('/api/queue/scan', {});
-      $('queueStatus').innerHTML = '<span class="spinner"></span>Recherche…';
-      setTimeout(loadQueue, 4000);
-    });
-        setInterval(() => { if (!$('panel-queue').hidden && !document.querySelector('#queue details[open]')) loadQueue(); }, 8000);
-    loadQueue();
-
     $('fileMode').addEventListener('click', () => $('fileModeInput').click());
     $('fileModeInput').addEventListener('change', async () => {
       const f = $('fileModeInput').files[0];
@@ -1041,8 +930,7 @@
     loadHistory();
     function showTab(name) {
       document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
-      for (const p of ['create', 'queue', 'history']) $('panel-' + p).hidden = p !== name;
-      if (name === 'queue') loadQueue();
+      for (const p of ['create', 'history']) $('panel-' + p).hidden = p !== name;
       if (name === 'history') loadHistory();
       try { localStorage.setItem('tab', name); } catch (e) { /* facultatif */ }
     }
