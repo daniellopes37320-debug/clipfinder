@@ -1,5 +1,6 @@
 // Analyse d'une vidéo YouTube : transcription -> meilleurs moments.
 // Partagé par le serveur (server.js) et le mode automatique (auto.js).
+import { enhanceClips } from './titles.js';
 import { findClipsSimple } from './heuristic.js';
 import { topKeywords } from './keywords.js';
 import { buildMetadata } from './meta.js';
@@ -217,7 +218,7 @@ export function finalizeClips(rawClips, { videoId, totalSeconds, segments, minDu
 }
 
 // Analyse complète à partir de la transcription déjà récupérée.
-export async function analyzeSegments({ segments, videoId, targetSeconds = 40, apiKey, model, energy = null, meta = {} }) {
+export async function analyzeSegments({ segments, videoId, targetSeconds = 40, apiKey, model, energy = null, meta = {}, titleAI = null }) {
   const last = segments[segments.length - 1];
   const totalSeconds = last.start + last.dur;
   const target = Math.min(90, Math.max(15, Number(targetSeconds) || 40));
@@ -241,11 +242,17 @@ export async function analyzeSegments({ segments, videoId, targetSeconds = 40, a
   }
   if (!result) result = findClipsSimple(segments, totalSeconds, 5, target, energy);
 
+  let clips = finalizeClips(result.clips, { videoId, totalSeconds, segments, minDur: Math.max(10, target * 0.35), meta });
+  // Titres, descriptions et hashtags rédigés par l'IA gratuite (Gemini), si une clé est configurée.
+  const ai = await enhanceClips(clips, { segments, videoTitle: meta.videoTitle, channel: meta.channel, name: meta.name, link: videoId, ai: titleAI });
+  clips = ai.clips;
+  if (ai.notice) notice = [notice, ai.notice].filter(Boolean).join(' ');
+
   return {
     mode,
     notice,
     totalSeconds,
     summary: String(result.video_summary || ''),
-    clips: finalizeClips(result.clips, { videoId, totalSeconds, segments, minDur: Math.max(10, target * 0.35), meta }),
+    clips,
   };
 }

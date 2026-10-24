@@ -6,6 +6,7 @@ import { createCutHandlers } from './cut.js';
 import { createPublisher } from './publish.js';
 import { ffmpegAvailable } from './reframe.js';
 import { createAuto } from './auto.js';
+import { DEFAULT_GEMINI_MODEL } from './titles.js';
 import { cleanOutput } from './cleanup.js';
 import { extractVideoId, fetchSegments, analyzeSegments } from './analysis.js';
 
@@ -16,6 +17,9 @@ const PORT = Number(process.env.PORT) || 3000;
 // Le site n'est accessible que depuis cet ordinateur (important : il peut publier sur ta chaîne).
 const HOST = '127.0.0.1';
 const MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-5-5';
+const GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
+const GEMINI_MODEL = (process.env.GEMINI_MODEL || '').trim() || DEFAULT_GEMINI_MODEL;
+const TITLE_AI = GEMINI_KEY ? { apiKey: GEMINI_KEY, model: GEMINI_MODEL } : null;
 const rawKey = (process.env.ANTHROPIC_API_KEY || '').trim();
 const API_KEY = rawKey && !/x{4,}/i.test(rawKey) ? rawKey : ''; // ignore la clé d'exemple
 
@@ -55,6 +59,7 @@ const cutter = createCutHandlers({
   setSegments: remember,
   apiKey: API_KEY,
   model: MODEL,
+  titleAI: TITLE_AI,
 });
 // Nettoyage facultatif : KEEP_DAYS=30 supprime les Shorts de plus de 30 jours (sauf ceux encore « à valider »).
 const keepDays = Number(process.env.KEEP_DAYS) || 0;
@@ -71,6 +76,7 @@ const auto = createAuto({
   inboxDir: path.join(__dirname, 'inbox'),
   apiKey: API_KEY,
   model: MODEL,
+  titleAI: TITLE_AI,
   intervalMs: 8000,
 });
 app.get('/api/queue', auto.list);
@@ -87,7 +93,7 @@ app.get('/api/queue/source/:id', (req, res) => {
 });
 
 app.get('/api/status', async (req, res) => {
-  res.json({ ffmpeg: await ffmpegAvailable(), ai: Boolean(API_KEY) });
+  res.json({ ffmpeg: await ffmpegAvailable(), ai: Boolean(API_KEY), titlesAI: Boolean(GEMINI_KEY) });
 });
 app.post('/api/upload', cutter.upload);
 app.post('/api/cut', cutter.cut);
@@ -144,6 +150,7 @@ app.post('/api/analyze', async (req, res) => {
       apiKey: API_KEY,
       model: MODEL,
       meta: await infoPromise,
+      titleAI: TITLE_AI,
     });
     res.json({
       videoId,
@@ -163,6 +170,7 @@ app.post('/api/analyze', async (req, res) => {
 const server = app.listen(PORT, HOST, () => {
   console.log(`ClipFinder prêt sur http://localhost:${PORT}`);
   console.log(API_KEY ? 'Analyse par Claude (clé API détectée).' : 'Mode gratuit : analyse simple, sans IA (aucune clé requise).');
+  console.log(GEMINI_KEY ? `Titres par IA gratuite (Gemini ${GEMINI_MODEL}).` : 'Titres simples (pour des titres par IA gratuite : GEMINI_API_KEY dans .env, voir le README).');
   console.log(publisher.configured ? 'Publication YouTube configurée.' : 'Publication YouTube non configurée (facultatif, voir le README).');
   auto.start();
   console.log(`Dépôt automatique : glissez vos vidéos dans ${auto.inboxDir}`);

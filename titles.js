@@ -1,0 +1,103 @@
+// Titres, descriptions et hashtags rédigés par une IA gratuite (Google Gemini), facultatif.
+// Une seule requête par analyse (tous les extraits ensemble) pour rester dans les limites gratuites.
+// En cas d'échec (clé absente, quota, réseau, réponse illisible), on garde les titres « règles » déjà calculés.
+
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
+const TIMEOUT_MS = 30_000;
+
+const SYSTEM = `Tu es un expert des YouTube Shorts francophones : tu écris des titres qui donnent envie de cliquer.
+Règles strictes :
+- Chaque titre fait 70 caractères maximum, dans la langue de l'extrait.
+- Il crée de la curiosité, de l'urgence ou une émotion (question, chiffre, promesse concrète, "tu ne devineras jamais", etc.), avec 0 à 2 emojis maximum.
+- Il reste VRAI : il ne promet rien que l'extrait ne montre pas, n'invente aucun fait, aucun nom, aucun chiffre absents du texte fourni. Pas de MAJUSCULES sur tout le titre.
+- Si le texte d'un extrait est vide ou trop pauvre, base-toi uniquement sur le titre de la vidéo d'origine et reste général.
+- 5 titres différents par extrait, du plus accrocheur au plus sobre.
+- La description : 2 ou 3 phrases courtes et naturelles qui résument l'extrait et donnent envie de voir la suite, sans le répéter mot pour mot dans le titre. Pas de lien, pas de hashtags dedans.
+- 6 à 8 hashtags pertinents (sans le symbole #, sans espaces), du plus précis au plus général, sans #Shorts.
+Réponds uniquement en JSON : {"clips":[{"id":0,"titles":["..."],"description":"...","hashtags":["..."]}]}`;
+
+const clean = (s) =>
+  String(s ?? '')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+const cutTo = (s, n) => (s.length <= n ? s : s.slice(0, n - 1).replace(/\s+\S*$/, '') + '…');
+const tagOf = (s) => clean(s).replace(/^#+/, '').replace(/[^\p{L}\p{N}_]/gu, '').slice(0, 30);
+
+export async function askGemini({ apiKey, model = DEFAULT_GEMINI_MODEL, videoTitle = '', channel = '', clips }) {
+  const user =
+    `Vidéo d'origine : « ${clean(videoTitle) || 'inconnue'} »${channel ? ` (chaîne : ${clean(channel)})` : ''}\n\n` +
+    'Extraits :\n' +
+    clips.map((c, i) => `#${i} (${Math.round(c.start)}s → ${Math.round(c.end)}s) texte : ${c.text ? '« ' + cutTo(clean(c.text), 700) + ' »' : '(aucun texte)'}`).join('\n');
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+    headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM }] },
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      generationConfig: { temperature: 0.9, maxOutputTokens: 4000, responseMimeType: 'application/json' },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    const hint = res.status === 404 ? ' (modèle introuvable : change GEMINI_MODEL dans .env)' : res.status === 429 ? ' (quota gratuit atteint)' : '';
+    throw new Error(`Gemini ${res.status}${hint} : ${body.slice(0, 160)}`);
+  }
+  const data = await res.json();
+  const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+  const a = text.indexOf('{');
+  const b = text.lastIndexOf('}');
+  if (a < 0 || b < 0) throw new Error('Réponse Gemini inattendue.');
+  let json;
+  try {
+    json = JSON.parse(text.slice(a, b + 1));
+  } catch {
+    throw new Error('Réponse Gemini illisible (JSON invalide).');
+  }
+  return Array.isArray(json.clips) ? json.clips : [];
+}
+
+// Applique les propositions de l'IA aux extraits déjà calculés. Renvoie { clips, notice }.
+export async function enhanceClips(clips, { segments = null, videoTitle = '', channel = '', name = '', link = '', ai = null, ask = askGemini }) {
+  if (!ai?.apiKey || !clips.length) return { clips, notice: '' };
+  const items = clips.map((c) => ({
+    start: c.start,
+    end: c.end,
+    text: segments ? segments.filter((s) => s.start >= c.start - 1 && s.start < c.end).map((s) => s.text).join(' ') : '',
+  }));
+  let out;
+  try {
+    out = await ask({ apiKey: ai.apiKey, model: ai.model || DEFAULT_GEMINI_MODEL, videoTitle: videoTitle || name, channel, clips: items });
+  } catch (e) {
+    console.warn('Titres par IA impossibles, titres simples conservés :', e.message);
+    return { clips, notice: 'Titres IA indisponibles (' + (e.name === 'TimeoutError' ? 'délai dépassé' : clean(e.message).slice(0, 110)) + ') : titres simples utilisés.' };
+  }
+  const source = clean(videoTitle || name);
+  const enhanced = clips.map((c, i) => {
+    const r = out.find((x) => Number(x?.id) === i) || out[i];
+    if (!r) return c;
+    const titles = (Array.isArray(r.titles) ? r.titles : [])
+      .map((t) => cutTo(clean(t), 100))
+      .filter((t) => t.length >= 8);
+    if (!titles.length) return c;
+    const tags = [...new Set((Array.isArray(r.hashtags) ? r.hashtags : []).map(tagOf).filter((t) => t && t.toLowerCase() !== 'shorts'))].slice(0, 8);
+    const body = clean(r.description);
+    const lines = [titles[0], ''];
+    if (body) lines.push(cutTo(body, 600), '');
+    if (source) lines.push(`🎬 Extrait de « ${cutTo(source, 90)} »${channel ? ` – ${clean(channel)}` : ''}`);
+    const l = link && c.link ? c.link : '';
+    if (l) lines.push(`👉 Vidéo complète : ${l}`);
+    lines.push('🔔 Abonne-toi pour ne rien rater', '', ['Shorts', ...tags].map((t) => '#' + t).join(' '));
+    return {
+      ...c,
+      title: titles[0],
+      titles,
+      tags: tags.length ? tags : c.tags,
+      description: lines.join('\n').replace(/\n{3,}/g, '\n\n').slice(0, 4900),
+      aiTitles: true,
+    };
+  });
+  return { clips: enhanced, notice: '' };
+}

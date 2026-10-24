@@ -41,6 +41,16 @@ Analyse gratuite par défaut. `ANTHROPIC_API_KEY` dans `.env` = IA payante, facu
 - **Cadrage « visage » aéré** : si le visage est trop gros (gros plan), le site élargit la zone visible (plan moyen, fond flou en haut et en bas). Il dézoome davantage si la personne bouge vite ou s'il y a plusieurs visages. Un plan déjà moyen reste inchangé.
 - **Choix des moments** : avec un fichier vidéo, le score combine le texte (accroches, mots forts) et le son (début dynamique, pics de voix, volume expressif). Le temps mort au début et à la fin est coupé. La hauteur de la voix n'est pas mesurée : les changements de ton sont estimés par les variations de volume.
 
+## Titres et descriptions par IA gratuite (facultatif)
+Sans réglage, ClipFinder écrit des titres simples à partir de règles. Pour des titres plus accrocheurs, des descriptions naturelles et de bons hashtags, branche l'IA gratuite **Google Gemini** :
+1. Va sur [aistudio.google.com/apikey](https://aistudio.google.com/apikey), connecte-toi et crée une clé (gratuite, sans carte bancaire).
+2. Dans `.env`, remplis `GEMINI_API_KEY=` avec cette clé (sans espaces ni guillemets).
+3. Si Google renomme le modèle et que tu vois « modèle introuvable », mets le nom actuel dans `GEMINI_MODEL=`.
+4. Ferme et relance ClipFinder : le démarrage affiche « Titres par IA gratuite ».
+
+Les titres restent fidèles au contenu de l'extrait (pas de promesse trompeuse). Une seule requête est envoyée par analyse, pour rester dans les limites gratuites. Si l'IA ne répond pas ou si le quota gratuit est atteint, les titres simples sont utilisés et un message l'indique.
+Les textes des extraits (sous-titres) sont envoyés à Google pour rédiger les titres : n'active cette option que pour des vidéos que tu peux partager avec ce service.
+
 ## Titres et descriptions automatiques
 Le site propose un titre (et 2 à 3 autres idées, cliquables) et une description complète : accroche, « Extrait de … », lien vers la vidéo complète (avec un lien YouTube), appel à s'abonner et hashtags.
 - **Clip musical** (nom contenant « Clip Officiel », « Official Video », « Lyrics »…) : « Le nouveau banger de Artiste 🔥 » si le nom est de la forme « Artiste - Titre », sinon « Nouveau clip : Nom 🔥 ».
@@ -79,6 +89,7 @@ Ne publie que tes vidéos ou celles de partenaires qui t'ont donné leur accord.
 | Variable | Rôle |
 |---|---|
 | `PORT` | Port du site (3000 par défaut ; si tu changes, mets aussi l'URI de redirection Google à jour) |
+| `GEMINI_API_KEY` / `GEMINI_MODEL` | Titres, descriptions et hashtags par IA gratuite (voir la section ci-dessus) |
 | `ANTHROPIC_API_KEY` / `CLAUDE_MODEL` | Analyse par IA ; vide = analyse gratuite. Si l'IA ne répond pas en 60 s, l'analyse simple prend le relais |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Publication YouTube |
 | `MAX_UPLOAD_GB` | Taille maximale d'une vidéo envoyée (4 par défaut) |

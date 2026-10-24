@@ -35,7 +35,7 @@ const pretty = (base) =>
     .trim()
     .replace(/^./, (c) => c.toUpperCase());
 
-export function createAuto({ baseDir, outputDir, inboxDir, apiKey = '', model = '', perVideo = 3, intervalMs = 20000 }) {
+export function createAuto({ baseDir, outputDir, inboxDir, apiKey = '', model = '', titleAI = null, perVideo = 3, intervalMs = 20000 }) {
   const stateFile = path.join(baseDir, 'queue.json');
   const tmpDir = path.join(baseDir, 'tmp');
   fs.mkdirSync(inboxDir, { recursive: true });
@@ -93,7 +93,7 @@ export function createAuto({ baseDir, outputDir, inboxDir, apiKey = '', model = 
 
     let clips = [];
     if (segments) {
-      const r = await analyzeSegments({ segments, videoId: null, targetSeconds: 40, apiKey, model, energy, meta: { name } });
+      const r = await analyzeSegments({ segments, videoId: null, targetSeconds: 40, apiKey, model, energy, meta: { name }, titleAI });
       clips = energy ? refineClips(r.clips, energy).map((c) => relabel(c, null)) : r.clips;
     }
     if (!clips.length && energy) {
