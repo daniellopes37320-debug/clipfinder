@@ -5,7 +5,6 @@ import { loadEnv } from './env.js';
 import { createCutHandlers } from './cut.js';
 import { createPublisher } from './publish.js';
 import { ffmpegAvailable } from './reframe.js';
-import { createAuto } from './auto.js';
 import { DEFAULT_GEMINI_MODEL } from './titles.js';
 import { cleanOutput } from './cleanup.js';
 import { extractVideoId, fetchSegments, analyzeSegments } from './analysis.js';
@@ -61,36 +60,13 @@ const cutter = createCutHandlers({
   model: MODEL,
   titleAI: TITLE_AI,
 });
-// Nettoyage facultatif : KEEP_DAYS=30 supprime les Shorts de plus de 30 jours (sauf ceux encore « à valider »).
+// Nettoyage facultatif : KEEP_DAYS=30 supprime les Shorts de plus de 30 jours .
 const keepDays = Number(process.env.KEEP_DAYS) || 0;
 if (keepDays > 0) {
-  const n = cleanOutput({ outputDir: cutter.outputDir, stateFile: path.join(__dirname, 'queue.json'), days: keepDays });
+  const n = cleanOutput({ outputDir: cutter.outputDir, days: keepDays });
   if (n) console.log(`Nettoyage : ${n} ancien(s) Short(s) supprimé(s) (plus de ${keepDays} jours).`);
 }
 const publisher = createPublisher({ baseDir: __dirname, outputDir: cutter.outputDir, port: PORT });
-
-// Dépôt automatique : les vidéos glissées dans le dossier « inbox » donnent des Shorts « à valider » (jamais publiés seuls)
-const auto = createAuto({
-  baseDir: __dirname,
-  outputDir: cutter.outputDir,
-  inboxDir: path.join(__dirname, 'inbox'),
-  apiKey: API_KEY,
-  model: MODEL,
-  titleAI: TITLE_AI,
-  intervalMs: 8000,
-});
-app.get('/api/queue', auto.list);
-app.post('/api/queue/scan', auto.scanNow);
-app.post('/api/queue/reject', auto.reject);
-app.post('/api/queue/done', auto.done);
-app.post('/api/queue/reframe', auto.reframe);
-app.post('/api/queue/delete-source', auto.deleteSource);
-app.post('/api/queue/retry', auto.retry);
-app.get('/api/queue/source/:id', (req, res) => {
-  const p = auto.sourcePath(req.params.id);
-  if (!p) return res.status(404).end();
-  res.sendFile(p, { dotfiles: 'allow' });
-});
 
 app.get('/api/status', async (req, res) => {
   res.json({ ffmpeg: await ffmpegAvailable(), ai: Boolean(API_KEY), titlesAI: Boolean(GEMINI_KEY) });
@@ -172,8 +148,6 @@ const server = app.listen(PORT, HOST, () => {
   console.log(API_KEY ? 'Analyse par Claude (clé API détectée).' : 'Mode gratuit : analyse simple, sans IA (aucune clé requise).');
   console.log(GEMINI_KEY ? `Titres par IA gratuite (Gemini ${GEMINI_MODEL}).` : 'Titres simples (pour des titres par IA gratuite : GEMINI_API_KEY dans .env, voir le README).');
   console.log(publisher.configured ? 'Publication YouTube configurée.' : 'Publication YouTube non configurée (facultatif, voir le README).');
-  auto.start();
-  console.log(`Dépôt automatique : glissez vos vidéos dans ${auto.inboxDir}`);
   ffmpegAvailable().then((ok) => {
     if (!ok) console.log("⚠️  ffmpeg est introuvable : installez-le avec « winget install Gyan.FFmpeg » pour créer des Shorts.");
   });

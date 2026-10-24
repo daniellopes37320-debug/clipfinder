@@ -57,13 +57,6 @@ Le site propose un titre (et 2 à 3 autres idées, cliquables) et une descriptio
 - **Autres vidéos** : le titre vient de la phrase la plus accrocheuse (si on a le texte), sinon du nom du fichier. Reconnaît aussi podcast/émission, jeu, tuto, humour, sport pour les hashtags.
 - Astuce : nomme tes fichiers « Artiste - Titre (Clip Officiel).mp4 » pour de meilleurs titres. Tout reste modifiable avant de publier.
 
-## Dépôt automatique (« À valider »)
-Glisse une vidéo (+ son `.srt`/`.vtt` du même nom, facultatif) dans le dossier `inbox`. Le site crée jusqu'à 3 Shorts, qui apparaissent dans « À valider ». Tu les vérifies, puis tu les publies ou les refuses. **Rien n'est jamais publié automatiquement.**
-Le dépôt utilise le cadrage « suit l'action ». Dans « À valider », le bouton **Recadrer sur le visage** refait le Short en suivant le visage (la vidéo d'origine doit rester dans `inbox`).
-Pour analyser un fichier avec ses sous-titres : bouton « Ajouter des sous-titres » avant d'envoyer la vidéo.
-
-Dans « À valider », la liste « Vidéos dans inbox » permet de supprimer une vidéo d'origine (et ses sous-titres) depuis le site, après confirmation. Les Shorts déjà créés sont gardés.
-
 ## Logo de chaîne (facultatif)
 Place un fichier `logo.png` (fond transparent, de préférence carré) à côté de `server.js` (`C:\clipfinder`) : il est ajouté en haut à droite de tous les nouveaux Shorts. Supprime-le pour ne plus en mettre. Relance le site après l'avoir ajouté.
 
@@ -74,13 +67,10 @@ Place un fichier `logo.png` (fond transparent, de préférence carré) à côté
 4. Dans la section **Audience** → **Utilisateurs test** → **Add users** : ajoute **ton adresse Gmail** (celle de ta chaîne YouTube) et enregistre. *Sans cette étape, Google affiche « Accès bloqué : erreur 403 access_denied ».*
 5. **Identifiants** → Créer des identifiants → **ID client OAuth** → type **Application Web**. Dans « URI de redirection autorisés », ajoute exactement : `http://localhost:3000/oauth/callback`.
 6. Copie l'**ID client** et le **code secret**. Dans `C:\clipfinder`, copie `.env.example`, renomme la copie `.env`, ouvre-la avec le Bloc-notes et remplis `GOOGLE_CLIENT_ID=` et `GOOGLE_CLIENT_SECRET=` (sans espaces ni guillemets). Enregistre, ferme ClipFinder et relance-le.
-7. Dans le site, clique sur **Connecter ma chaîne YouTube** (onglet « À valider »). Si Google affiche « Google n'a pas validé cette appli », clique sur **Paramètres avancés** → **Accéder à … (non sécurisé)** : c'est ton propre projet.
+7. Dans le site, clique sur **Connecter ma chaîne YouTube** (en haut de l'onglet Créer). Si Google affiche « Google n'a pas validé cette appli », clique sur **Paramètres avancés** → **Accéder à … (non sécurisé)** : c'est ton propre projet.
 8. Avant de publier, coche « J'ai l'autorisation ».
 
 Notes : publication en **privé** par défaut. À ma connaissance, un projet Google non vérifié garde les vidéos privées, et la connexion en mode test peut expirer après ~7 jours (reconnecte-toi). Quota limité par jour.
-
-## Automatisation légère
-`auto-clipfinder.bat -Depot "C:\dossier" -Ouvrir` lance le site en arrière-plan et copie vers `inbox` les nouvelles vidéos d'un dossier que tu possèdes (ex. dossier partagé avec un partenaire).
 
 ## Droits
 Ne publie que tes vidéos ou celles de partenaires qui t'ont donné leur accord.
@@ -94,7 +84,7 @@ Ne publie que tes vidéos ou celles de partenaires qui t'ont donné leur accord.
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Publication YouTube |
 | `MAX_UPLOAD_GB` | Taille maximale d'une vidéo envoyée (4 par défaut) |
 | `AUTO_BLUR_THRESHOLD` | Cadrage « auto » : si l'action est répartie sur toute l'image (jeu vidéo, interface), l'image entière est gardée sur fond flou au lieu d'être recadrée (0,5 par défaut ; 0 = toujours recadrer ; 1 = toujours image entière) |
-| `KEEP_DAYS` | Supprime les Shorts de plus de N jours (0 = jamais ; les Shorts « à valider » sont gardés) |
+| `KEEP_DAYS` | Supprime les Shorts de plus de N jours (0 = jamais) |
 
 ## Dépannage
 - **« ffmpeg est introuvable »** : `winget install Gyan.FFmpeg`, puis ferme et rouvre PowerShell.
@@ -103,7 +93,6 @@ Ne publie que tes vidéos ou celles de partenaires qui t'ont donné leur accord.
 - **La connexion YouTube expire au bout de 7 jours** : écran de consentement en mode « Test » ; reconnecte-toi ou passe-le en production.
 - **Les vidéos publiées restent privées** : normal pour un projet Google non validé ; change la visibilité dans YouTube Studio.
 - **Pas de visage détecté** : le modèle de détection se charge depuis Internet ; sans connexion le cadrage « suit l'action » est utilisé.
-- **Un fichier de l'inbox est en erreur** : clique sur « Réessayer les fichiers en erreur » dans l'onglet À valider.
 - **Port déjà utilisé** : ferme l'autre fenêtre ClipFinder ou change `PORT`.
 
 ## Développement

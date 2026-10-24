@@ -1,9 +1,6 @@
 .env
 youtube-token.json
-queue.json
-depot-copied.txt
 logo.png
 node_modules
 output
 tmp
-inbox

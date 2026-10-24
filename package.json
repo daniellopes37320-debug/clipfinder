@@ -6,7 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check analysis.js && node --check auto.js && node --check cut.js && node --check publish.js && node --check reframe.js && node --check audio.js && node --check captions.js && node --check heuristic.js && node --check meta.js && node --check keywords.js && node --check env.js && node --check cleanup.js && node --check titles.js",
+    "check": "node --check server.js && node --check analysis.js && node --check cut.js && node --check publish.js && node --check reframe.js && node --check audio.js && node --check captions.js && node --check heuristic.js && node --check meta.js && node --check keywords.js && node --check env.js && node --check cleanup.js && node --check titles.js",
     "test": "node --test"
   },
   "engines": {
