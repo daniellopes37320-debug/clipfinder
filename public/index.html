@@ -39,7 +39,7 @@
     header p { color: var(--muted); margin: 0 auto; max-width: 560px; }
 
     form { display: flex; gap: 10px; margin-bottom: 10px; }
-    input[type=text], input[type=number], select, textarea {
+    input[type=text], input[type=password], input[type=number], select, textarea {
       font-family: inherit; color: var(--text); background: var(--panel-2);
       border: 1px solid var(--border); border-radius: 8px; outline: none;
     }
@@ -203,6 +203,18 @@
     .idea { text-align: left; font: inherit; font-size: 13px; color: var(--text); background: var(--panel-2); border: 1px dashed var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer; max-width: 100%; }
     .idea:hover { border-color: var(--accent); }
     .panel[hidden] { display: none; }
+    .conn { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 16px; }
+    .conn h2 { font-size: 17px; margin: 0 0 4px; }
+    .conn p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+    .conn label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+    .conn input[type=text], .conn input[type=password], .conn select { width: 100%; }
+    .conn .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .conn .check { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 14px; margin-top: 12px; }
+    .conn-msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+    .conn-msg.ok { color: var(--good); }
+    .conn-msg.error { color: #ff7a85; }
+    .conn-state { display: inline-block; font-size: 12px; border-radius: 99px; padding: 2px 10px; background: var(--panel-2); color: var(--muted); margin-left: 8px; vertical-align: middle; }
+    .conn-state.on { color: var(--good); }
     details.more { max-width: 640px; margin: 0 auto 16px; text-align: center; }
     details.more summary { cursor: pointer; color: var(--muted); font-size: 14px; }
     details.more .btnrow { justify-content: center; margin: 10px 0; }
@@ -220,6 +232,7 @@
     <nav class="tabs" id="tabs">
       <button type="button" class="tab on" data-tab="create">Créer un Short</button>
       <button type="button" class="tab" data-tab="history">Mes Shorts</button>
+      <button type="button" class="tab" data-tab="conn">Connexions</button>
     </nav>
 
     <div class="panel" id="panel-create">
@@ -315,6 +328,68 @@
 
     <div class="panel" id="panel-history" hidden>
       <div id="history"></div>
+    </div>
+
+    <div class="panel" id="panel-conn" hidden>
+      <section class="conn">
+        <h2>Titres et descriptions</h2>
+        <p>Une IA écrit des titres accrocheurs, la description et les hashtags, dans la langue de la vidéo. Sans IA, des titres simples sont utilisés.</p>
+        <label for="titleAI">IA utilisée pour les titres</label>
+        <select id="titleAI">
+          <option value="auto">Automatique (Gemini d'abord, puis Claude)</option>
+          <option value="gemini">Gemini (gratuit)</option>
+          <option value="claude">Claude (payant)</option>
+          <option value="none">Aucune (titres simples)</option>
+        </select>
+        <div class="conn-msg" id="titleNow"></div>
+      </section>
+
+      <section class="conn">
+        <h2>Gemini <span class="conn-state" id="gemState"></span></h2>
+        <p>IA gratuite de Google. Clé gratuite : <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Elle reste sur ton PC, dans le fichier .env.</p>
+        <label for="gemKey">Clé API Gemini</label>
+        <input type="password" id="gemKey" autocomplete="off" spellcheck="false" placeholder="Colle ta clé ici" />
+        <label for="gemModel">Modèle</label>
+        <input type="text" id="gemModel" autocomplete="off" spellcheck="false" />
+        <div class="row">
+          <button type="button" class="ghost" id="gemSave">Enregistrer</button>
+          <button type="button" class="ghost" id="gemTest">Tester</button>
+          <button type="button" class="linkbtn" id="gemRemove">Retirer la clé</button>
+        </div>
+        <div class="conn-msg" id="gemMsg"></div>
+      </section>
+
+      <section class="conn">
+        <h2>Claude <span class="conn-state" id="claState"></span></h2>
+        <p>IA payante d'Anthropic (facultatif). Clé sur <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</p>
+        <label for="claKey">Clé API Claude</label>
+        <input type="password" id="claKey" autocomplete="off" spellcheck="false" placeholder="Colle ta clé ici" />
+        <label for="claModel">Modèle</label>
+        <input type="text" id="claModel" autocomplete="off" spellcheck="false" />
+        <label class="check"><input type="checkbox" id="claMoments" /> Utiliser aussi Claude pour trouver les meilleurs moments (payant)</label>
+        <div class="row">
+          <button type="button" class="ghost" id="claSave">Enregistrer</button>
+          <button type="button" class="ghost" id="claTest">Tester</button>
+          <button type="button" class="linkbtn" id="claRemove">Retirer la clé</button>
+        </div>
+        <div class="conn-msg" id="claMsg"></div>
+      </section>
+
+      <section class="conn">
+        <h2>Compte YouTube <span class="conn-state" id="ytState"></span></h2>
+        <p>Pour publier tes Shorts sur ta chaîne. Il faut d'abord créer un accès Google Cloud (marche à suivre dans le README, section « Publier sur YouTube »).</p>
+        <div class="yt-bar" id="ytBar3">YouTube…</div>
+        <label for="ggId">ID client Google</label>
+        <input type="text" id="ggId" autocomplete="off" spellcheck="false" placeholder="xxxxxxxx.apps.googleusercontent.com" />
+        <label for="ggSecret">Code secret client</label>
+        <input type="password" id="ggSecret" autocomplete="off" spellcheck="false" placeholder="GOCSPX-…" />
+        <p style="margin-top:10px">URI de redirection à déclarer dans Google Cloud : <code id="redirectUri"></code></p>
+        <div class="row">
+          <button type="button" class="ghost" id="ggSave">Enregistrer</button>
+          <button type="button" class="linkbtn" id="ggRemove">Retirer les identifiants</button>
+        </div>
+        <div class="conn-msg" id="ggMsg"></div>
+      </section>
     </div>
 
     <footer>Le lien YouTube fonctionne avec les vidéos qui ont des sous-titres (automatiques ou manuels).</footer>
@@ -745,7 +820,7 @@
       } else {
         html = `YouTube connecté${yt.channel ? ' : <b>' + esc(yt.channel) + '</b>' : ''}. <button type="button" class="linkbtn yt-off">Déconnecter</button>`;
       }
-      for (const bar of [$('ytBar')]) {
+      for (const bar of [$('ytBar'), $('ytBar3')]) {
         bar.innerHTML = html;
         const off = bar.querySelector('.yt-off');
         if (off) off.addEventListener('click', async () => {
@@ -921,6 +996,65 @@
       }
     });
 
+    // ---------- Connexions (clés IA, YouTube) ----------
+    function msg(id, text, kind) { const el = $(id); el.textContent = text || ''; el.className = 'conn-msg' + (kind ? ' ' + kind : ''); }
+    function fillConn(c) {
+      $('titleAI').value = c.titles.pref;
+      const names = { gemini: 'Gemini (gratuit)', claude: 'Claude', none: 'aucune IA : titres simples' };
+      msg('titleNow', 'Titres écrits par : ' + names[c.titles.provider], c.titles.provider === 'none' ? '' : 'ok');
+      $('gemState').textContent = c.gemini.set ? 'clé enregistrée ' + c.gemini.hint : 'pas de clé';
+      $('gemState').classList.toggle('on', c.gemini.set);
+      $('gemModel').value = c.gemini.model;
+      $('claState').textContent = c.claude.set ? 'clé enregistrée ' + c.claude.hint : 'pas de clé';
+      $('claState').classList.toggle('on', c.claude.set);
+      $('claModel').value = c.claude.model;
+      $('claMoments').checked = c.claude.moments;
+      $('claMoments').disabled = !c.claude.set;
+      $('redirectUri').textContent = c.redirectUri;
+      $('ggId').placeholder = c.google.idSet ? 'enregistré : ' + c.google.idHint + ' (laisse vide pour garder)' : 'xxxxxxxx.apps.googleusercontent.com';
+      $('ggSecret').placeholder = c.google.secretSet ? 'enregistré (laisse vide pour garder)' : 'GOCSPX-…';
+      $('ytState').textContent = c.google.idSet && c.google.secretSet ? 'identifiants enregistrés' : 'à configurer';
+      $('ytState').classList.toggle('on', c.google.idSet && c.google.secretSet);
+    }
+    async function loadConn() {
+      try { fillConn(await (await fetch('/api/settings')).json()); } catch { msg('titleNow', 'Impossible de lire les réglages.', 'error'); }
+    }
+    async function saveConn(body, msgId, okText) {
+      msg(msgId, 'Enregistrement…');
+      try {
+        const r = await post('/api/settings', body);
+        fillConn(r.settings);
+        msg(msgId, okText, 'ok');
+        refreshYT();
+        return true;
+      } catch (err) {
+        msg(msgId, err.message, 'error');
+        return false;
+      }
+    }
+    async function testConn(provider, keyId, modelId, msgId) {
+      msg(msgId, 'Test en cours…');
+      try {
+        const r = await post('/api/settings/test', { provider, key: $(keyId).value, model: $(modelId).value });
+        msg(msgId, r.message, r.ok ? 'ok' : 'error');
+      } catch (err) { msg(msgId, err.message, 'error'); }
+    }
+    $('titleAI').addEventListener('change', () => saveConn({ titleAI: $('titleAI').value }, 'titleNow', 'Choix enregistré.').then(loadConn));
+    $('gemSave').addEventListener('click', async () => {
+      if (await saveConn({ geminiKey: $('gemKey').value, geminiModel: $('gemModel').value }, 'gemMsg', 'Enregistré. Clique sur Tester pour vérifier.')) $('gemKey').value = '';
+    });
+    $('gemTest').addEventListener('click', () => testConn('gemini', 'gemKey', 'gemModel', 'gemMsg'));
+    $('gemRemove').addEventListener('click', () => saveConn({ remove: ['gemini'] }, 'gemMsg', 'Clé retirée.'));
+    $('claSave').addEventListener('click', async () => {
+      if (await saveConn({ claudeKey: $('claKey').value, claudeModel: $('claModel').value, claudeMoments: $('claMoments').checked }, 'claMsg', 'Enregistré. Clique sur Tester pour vérifier.')) $('claKey').value = '';
+    });
+    $('claTest').addEventListener('click', () => testConn('claude', 'claKey', 'claModel', 'claMsg'));
+    $('claRemove').addEventListener('click', () => saveConn({ remove: ['claude'] }, 'claMsg', 'Clé retirée.'));
+    $('ggSave').addEventListener('click', async () => {
+      if (await saveConn({ googleId: $('ggId').value, googleSecret: $('ggSecret').value }, 'ggMsg', 'Enregistré. Clique sur « Connecter ma chaîne YouTube ».')) { $('ggId').value = ''; $('ggSecret').value = ''; }
+    });
+    $('ggRemove').addEventListener('click', () => saveConn({ remove: ['google'] }, 'ggMsg', 'Identifiants retirés.'));
+
     // ---------- Démarrage ----------
     fetch('/api/status')
       .then((r) => r.json())
@@ -930,8 +1064,9 @@
     loadHistory();
     function showTab(name) {
       document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
-      for (const p of ['create', 'history']) $('panel-' + p).hidden = p !== name;
+      for (const p of ['create', 'history', 'conn']) $('panel-' + p).hidden = p !== name;
       if (name === 'history') loadHistory();
+      if (name === 'conn') loadConn();
       try { localStorage.setItem('tab', name); } catch (e) { /* facultatif */ }
     }
     $('tabs').addEventListener('click', (e) => { const b = e.target.closest('.tab'); if (b) showTab(b.dataset.tab); });
