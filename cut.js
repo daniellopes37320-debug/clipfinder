@@ -44,6 +44,31 @@ export function createCutHandlers({ baseDir, getSegments = () => undefined, setS
     }
   }
 
+  // Titres et infos des Shorts créés, gardés à côté des vidéos (pour l'onglet Historique).
+  const metaFile = path.join(outputDir, 'history.json');
+  function readMeta() {
+    try {
+      const m = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+      return m && typeof m === 'object' ? m : {};
+    } catch {
+      return {};
+    }
+  }
+  function recordMeta(name, info) {
+    try {
+      const m = readMeta();
+      m[name] = info;
+      const keep = Object.keys(m).filter((k) => fs.existsSync(path.join(outputDir, k)) || k === name);
+      const out = {};
+      for (const k of keep) out[k] = m[k];
+      const tmp = metaFile + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(out));
+      fs.renameSync(tmp, metaFile);
+    } catch {
+      /* l'historique reste utilisable sans les titres */
+    }
+  }
+
   const energyCache = new Map(); // uploadId -> { step, rms }
   const uploadNames = new Map(); // uploadId -> nom du fichier d'origine (pour proposer titre et description)
 
@@ -123,7 +148,7 @@ export function createCutHandlers({ baseDir, getSegments = () => undefined, setS
 
   async function cut(req, res) {
     try {
-      const { uploadId, start, end, framing = 'auto', captions = false, videoId = null, captionKey = null, samples = null } = req.body || {};
+      const { uploadId, start, end, framing = 'auto', captions = false, videoId = null, captionKey = null, samples = null, title = '' } = req.body || {};
       const input = findUpload(uploadId);
       if (!/^[a-f0-9]{8}$/.test(String(uploadId))) {
         return json(res, 400, { error: 'Fichier inconnu : renvoyez la vidéo.' });
@@ -168,6 +193,11 @@ export function createCutHandlers({ baseDir, getSegments = () => undefined, setS
         logo: findLogo(baseDir),
       });
       if (result.note) notes.unshift(result.note);
+      recordMeta(outName, {
+        title: String(title || '').replace(/\s+/g, ' ').trim().slice(0, 100),
+        source: String(uploadNames.get(uploadId) || '').slice(0, 200),
+        duration: Math.round(realEnd - s),
+      });
       json(res, 200, {
         url: '/clips/' + outName,
         name: outName,
@@ -279,12 +309,14 @@ export function createCutHandlers({ baseDir, getSegments = () => undefined, setS
 
   function history(req, res) {
     try {
+      const meta = readMeta();
       const items = fs
         .readdirSync(outputDir)
         .filter((f) => /^short-[a-z0-9-]+\.mp4$/.test(f))
         .map((f) => {
           const st = fs.statSync(path.join(outputDir, f));
-          return { name: f, url: '/clips/' + f, size: st.size, date: st.mtime.toISOString() };
+          const m = meta[f] || {};
+          return { name: f, url: '/clips/' + f, size: st.size, date: st.mtime.toISOString(), title: m.title || '', source: m.source || '', duration: m.duration || 0 };
         })
         .sort((a, b) => b.date.localeCompare(a.date))
         .slice(0, 50);
