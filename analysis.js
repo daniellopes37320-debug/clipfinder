@@ -1,6 +1,7 @@
 // Analyse d'une vidéo YouTube : transcription -> meilleurs moments.
 // Partagé par le serveur (server.js) et le mode automatique (auto.js).
 import { enhanceClips } from './titles.js';
+import { detectLang } from './lang.js';
 import { findClipsSimple } from './heuristic.js';
 import { topKeywords } from './keywords.js';
 import { buildMetadata } from './meta.js';
@@ -62,6 +63,16 @@ export async function fetchSegments(videoId) {
   try {
     const { YoutubeTranscript } = await import('youtube-transcript');
     raw = await YoutubeTranscript.fetchTranscript(videoId);
+    // La piste par défaut peut être une autre langue (doublage, traduction auto) : on cherche la langue parlée.
+    const sample = (r) => r.slice(0, 80).map((x) => x.text).join(' ');
+    if (!detectLang(sample(raw))) {
+      for (const lang of ['en', 'fr', 'es', 'pt', 'de', 'it']) {
+        try {
+          const alt = await YoutubeTranscript.fetchTranscript(videoId, { lang });
+          if (alt?.length && detectLang(sample(alt)) === lang) { raw = alt; break; }
+        } catch { /* langue indisponible, on essaie la suivante */ }
+      }
+    }
   } catch (e) {
     const x = new Error("Impossible de récupérer la transcription. La vidéo n'a peut-être pas de sous-titres, ou elle est privée.");
     x.code = 'NO_TRANSCRIPT';
