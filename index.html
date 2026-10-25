@@ -1,0 +1,1153 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ClipFinder</title>
+  <style>
+    :root {
+      --bg: #0e0f13;
+      --panel: #171922;
+      --panel-2: #1f2230;
+      --border: #2a2e3f;
+      --text: #eef0f6;
+      --muted: #9aa0b5;
+      --accent: #ff4d5e;
+      --accent-2: #ff8a4d;
+      --good: #3ddc97;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(1200px 500px at 50% -200px, #2a1620 0%, var(--bg) 60%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    .wrap { max-width: 1000px; margin: 0 auto; padding: 48px 20px 80px; }
+    header { text-align: center; margin-bottom: 36px; }
+    .logo {
+      font-weight: 800; font-size: 14px; letter-spacing: .14em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 14px;
+    }
+    h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.1; margin: 0 0 12px; }
+    h1 span {
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    header p { color: var(--muted); margin: 0 auto; max-width: 560px; }
+
+    form { display: flex; gap: 10px; margin-bottom: 10px; }
+    input[type=text], input[type=password], input[type=number], select, textarea {
+      font-family: inherit; color: var(--text); background: var(--panel-2);
+      border: 1px solid var(--border); border-radius: 8px; outline: none;
+    }
+    input[type=text]:focus, input[type=number]:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    #url {
+      flex: 1; min-width: 0; padding: 16px 18px; font-size: 16px; background: var(--panel);
+      border-radius: 12px;
+    }
+    #target { padding: 0 12px; font-size: 14px; border-radius: 12px; background: var(--panel); }
+    button.primary {
+      padding: 0 26px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      border: 0; border-radius: 12px; white-space: nowrap;
+    }
+    button.primary:disabled { opacity: .5; cursor: not-allowed; }
+    button.ghost {
+      font-size: 14px; padding: 12px 16px; border-radius: 10px; cursor: pointer; color: var(--text);
+      background: var(--panel-2); border: 1px solid var(--border);
+    }
+    button.ghost:hover:not(:disabled) { border-color: var(--accent); }
+    button.ghost:disabled { opacity: .5; cursor: not-allowed; }
+    .linkbtn {
+      background: none; border: 0; padding: 0; color: var(--muted); font-size: 13px; cursor: pointer;
+      text-decoration: underline; font-family: inherit;
+    }
+    .linkbtn:hover { color: var(--text); }
+    .alt { text-align: center; margin-bottom: 8px; }
+    @media (max-width: 640px) { form { flex-wrap: wrap; } #url { flex-basis: 100%; } #target, #go { height: 46px; } }
+
+    .status { min-height: 24px; text-align: center; color: var(--muted); margin-bottom: 20px; }
+    .status.error { color: #ff7b8a; }
+    .status.warn { color: var(--accent-2); }
+    .spinner {
+      display: inline-block; width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px;
+      border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #results { display: none; }
+    .layout { display: grid; grid-template-columns: 1.1fr 1fr; gap: 22px; align-items: start; }
+    @media (max-width: 820px) { .layout { grid-template-columns: 1fr; } }
+
+    .player-box {
+      position: sticky; top: 16px; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 16px; padding: 14px;
+    }
+    .player { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #000; }
+    .player iframe, .player > div { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .player video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+    /* Format Short : cadre vertical 9:16, la vidéo 16:9 est recadrée au centre */
+    .player.short { aspect-ratio: 9 / 16; max-width: 300px; margin: 0 auto; border-radius: 18px; }
+    .player.short iframe { inset: 0 auto 0 50%; width: 316%; height: 100%; transform: translateX(-50%); }
+    .player.short video { object-fit: cover; }
+    .player .short-title {
+      display: none; position: absolute; inset: auto 0 46px 0; width: auto; height: auto; padding: 40px 14px 10px;
+      font-weight: 800; font-size: 15px; line-height: 1.25; color: #fff; text-shadow: 0 1px 4px #000;
+      background: linear-gradient(transparent, rgba(0,0,0,.65)); pointer-events: none; z-index: 2;
+    }
+    .player.short .short-title.on { display: block; }
+    .formats { display: flex; justify-content: center; gap: 6px; margin-bottom: 10px; }
+    .formats button {
+      font-size: 13px; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+      background: var(--panel-2); color: var(--muted); border: 1px solid var(--border);
+    }
+    .formats button.on { color: #fff; border-color: var(--accent); }
+    .summary { color: var(--muted); font-size: 14px; margin: 12px 4px 2px; }
+    .playing { color: var(--good); font-size: 13px; margin: 8px 4px 0; min-height: 20px; }
+
+    .clips { display: flex; flex-direction: column; gap: 12px; }
+    .clip {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px;
+      transition: border-color .15s;
+    }
+    .clip.active { border-color: var(--accent); }
+    .clip-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+    .clip h3 { margin: 0; font-size: 16px; }
+    .score {
+      flex-shrink: 0; font-weight: 800; font-size: 13px; padding: 4px 10px; border-radius: 999px;
+      background: var(--panel-2); color: var(--good);
+    }
+    .time { color: var(--accent-2); font-weight: 600; font-size: 14px; margin: 6px 0; }
+    .hook { font-style: italic; color: var(--text); font-size: 14px; margin: 8px 0; }
+    .reason { color: var(--muted); font-size: 14px; margin: 0 0 10px; }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+    .tags span { font-size: 12px; color: var(--muted); background: var(--panel-2); border-radius: 999px; padding: 2px 9px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .actions button, .actions a {
+      font-size: 13px; padding: 8px 12px; border-radius: 8px; cursor: pointer; text-decoration: none;
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    }
+    .actions button:hover, .actions a:hover { border-color: var(--accent); }
+
+    .maker {
+      display: none; margin-top: 26px; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 16px; padding: 22px;
+    }
+    .maker h2 { margin: 0 0 4px; font-size: 20px; }
+    .maker-grid { display: grid; grid-template-columns: 1fr 330px; gap: 24px; align-items: start; }
+    @media (max-width: 820px) { .maker-grid { grid-template-columns: 1fr; } }
+    .maker-target { color: var(--accent-2); font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+    .field { display: block; margin: 14px 0; font-size: 14px; color: var(--muted); }
+    .field input, .field select, .field textarea {
+      display: block; width: 100%; margin-top: 6px; padding: 10px 12px; font-size: 14px;
+    }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .check { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0; font-size: 14px; color: var(--text); }
+    .check input { margin-top: 4px; }
+    .check.off { color: var(--muted); }
+    .btnrow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .maker .primary { padding: 14px 26px; }
+    .maker-status { min-height: 22px; margin-top: 12px; font-size: 14px; color: var(--muted); }
+    .maker-status.error { color: #ff7b8a; }
+    .maker-status.warn { color: var(--accent-2); }
+    .notice {
+      margin: 12px 0; padding: 12px 14px; font-size: 14px; border-radius: 10px;
+      background: #2a2216; border: 1px solid #5a4520; color: #ffd9a0;
+    }
+    .notice code { background: #00000055; padding: 2px 6px; border-radius: 5px; }
+    .rights { color: var(--muted); font-size: 12px; margin: 14px 0 0; }
+
+    .yt-bar { font-size: 13px; color: var(--muted); margin-bottom: 14px; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); }
+    .yt-bar a, .yt-bar button { color: var(--text); }
+    .yt-bar .btn {
+      display: inline-block; margin-top: 6px; padding: 7px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
+      text-decoration: none; background: var(--panel); border: 1px solid var(--border);
+    }
+    .res-card { margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+    .res-card:last-child { border-bottom: 0; }
+    .res-card video {
+      display: block; width: 100%; max-width: 300px; aspect-ratio: 9 / 16; margin: 0 auto;
+      border-radius: 18px; background: #000;
+    }
+    .dl {
+      display: block; max-width: 300px; margin: 12px auto 0; text-align: center; text-decoration: none;
+      font-weight: 700; color: #fff; padding: 12px; border-radius: 10px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+    .res-note { font-size: 13px; color: var(--accent-2); max-width: 300px; margin: 10px auto 0; }
+    .pub { max-width: 300px; margin: 14px auto 0; }
+    .pub summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+    .pub .primary { width: 100%; padding: 12px; font-size: 15px; }
+    .pub-status { font-size: 13px; margin-top: 10px; color: var(--muted); }
+    .pub-status.error { color: #ff7b8a; }
+    .pub-status.ok { color: var(--good); }
+    .pub-status a { color: var(--good); }
+
+    details.history { margin-top: 34px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px 18px; }
+    details.history summary { cursor: pointer; font-weight: 600; }
+    .h-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+    .h-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
+    .h-card video { width: 100%; aspect-ratio: 9 / 16; max-height: 360px; background: #000; display: block; object-fit: cover; }
+    .h-meta { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+    .h-meta b { font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+    .h-meta span { color: var(--muted); font-size: 12px; }
+    .h-meta a { margin-top: 6px; color: var(--text); text-decoration: none; font-weight: 600; border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; text-align: center; background: var(--panel-2); }
+    .h-meta a:hover { border-color: var(--accent); }
+    .h-note { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+
+    .tabs { display: flex; gap: 6px; margin: 0 0 22px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+    .tab { background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); font: inherit; font-size: 15px; font-weight: 600; padding: 12px 16px; cursor: pointer; white-space: nowrap; }
+    .tab:hover { color: var(--text); }
+    .tab.on { color: var(--text); border-bottom-color: var(--accent); }
+    .src-row { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; font-size: 13px; }
+    .ideas { display: flex; flex-direction: column; gap: 6px; margin: -4px 0 12px; align-items: flex-start; }
+    .idea { text-align: left; font: inherit; font-size: 13px; color: var(--text); background: var(--panel-2); border: 1px dashed var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer; max-width: 100%; }
+    .idea:hover { border-color: var(--accent); }
+    .panel[hidden] { display: none; }
+    .steps { display: flex; gap: 8px; margin: 0 0 22px; }
+    .step { flex: 1; text-align: center; padding: 10px 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); font-size: 13px; font-weight: 600; }
+    .step b { display: inline-block; width: 22px; height: 22px; line-height: 22px; border-radius: 50%; background: var(--border); color: var(--text); margin-right: 6px; font-size: 12px; }
+    .step.on { color: var(--text); border-color: var(--accent); }
+    .step.on b { background: var(--accent); }
+    .step.done { color: var(--good); }
+    .step.done b { background: var(--good); color: #0e0f13; }
+    details.adv { margin: 14px 0 6px; border-top: 1px solid var(--border); padding-top: 10px; }
+    details.adv summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+    .step3bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    .conn { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 16px; }
+    .conn h2 { font-size: 17px; margin: 0 0 4px; }
+    .conn p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+    .conn label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+    .conn input[type=text], .conn input[type=password], .conn select { width: 100%; }
+    .conn .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .conn .check { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 14px; margin-top: 12px; }
+    .conn-msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+    .conn-msg.ok { color: var(--good); }
+    .conn-msg.error { color: #ff7a85; }
+    .conn-state { display: inline-block; font-size: 12px; border-radius: 99px; padding: 2px 10px; background: var(--panel-2); color: var(--muted); margin-left: 8px; vertical-align: middle; }
+    .conn-state.on { color: var(--good); }
+    details.more { max-width: 640px; margin: 0 auto 16px; text-align: center; }
+    details.more summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+    details.more .btnrow { justify-content: center; margin: 10px 0; }
+    footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 40px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo">ClipFinder</div>
+      <h1>Crée tes <span>Shorts</span> en quelques clics</h1>
+      <p>Choisis une vidéo, vérifie les extraits proposés, puis télécharge ou publie.</p>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button type="button" class="tab on" data-tab="create">Créer un Short</button>
+      <button type="button" class="tab" data-tab="history">Historique</button>
+      <button type="button" class="tab" data-tab="conn">Connexions</button>
+    </nav>
+
+    <div class="panel" id="panel-create">
+
+    <div class="steps" id="steps">
+      <div class="step on" id="step-1"><b>1</b>Ta vidéo</div>
+      <div class="step" id="step-2"><b>2</b>Choisis un moment</div>
+      <div class="step" id="step-3"><b>3</b>Ton Short</div>
+    </div>
+
+    <div id="step1Box">
+    <form id="form">
+      <input id="url" type="text" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off" required />
+      <select id="target" title="Durée visée pour chaque extrait" hidden style="display:none">
+        <option value="40">Durée : auto</option>
+        <option value="30">30 s</option>
+        <option value="45">45 s</option>
+        <option value="60">60 s</option>
+        <option value="90">90 s</option>
+      </select>
+      <button class="primary" id="go" type="submit">Analyser</button>
+    </form>
+    <details class="more">
+      <summary>Pas de lien YouTube ? Analyser un fichier vidéo</summary>
+      <p class="rights">Le fichier est analysé sur ton PC. Avec un fichier de sous-titres (.srt / .vtt), les titres sont meilleurs et tu peux incruster les sous-titres.</p>
+      <div class="btnrow">
+        <button type="button" class="ghost" id="subsBtn">Ajouter des sous-titres (facultatif)</button>
+        <button type="button" class="ghost" id="fileMode">Choisir la vidéo</button>
+      </div>
+      <input type="file" id="subsInput" accept=".srt,.vtt" hidden />
+      <input type="file" id="fileModeInput" accept="video/*,.mkv" hidden />
+      <span id="subsName" class="rights"></span>
+    </details>
+    </div>
+    <div class="status" id="status"></div>
+
+    <section id="results">
+      <div class="layout">
+        <div class="player-box">
+          <div class="formats">
+            <button type="button" id="fmt-short" class="on">Short 9:16</button>
+            <button type="button" id="fmt-wide">Vidéo 16:9</button>
+          </div>
+          <div class="player short" id="playerFrame">
+            <div id="yt"></div>
+            <video id="localVideo" controls playsinline style="display:none"></video>
+            <div class="short-title" id="shortTitle"></div>
+          </div>
+          <div class="playing" id="playing"></div>
+          <div class="summary" id="summary"></div>
+        </div>
+        <div class="clips" id="clips"></div>
+      </div>
+
+      <div class="maker" id="maker">
+        <h2 id="makerTitle">Créer le Short</h2>
+        <div class="maker-grid" id="makerGrid">
+          <div id="makerLeft">
+            <div class="maker-target" id="makerTarget"></div>
+            <div class="notice" id="ffmpegNotice" style="display:none">
+              ffmpeg n'est pas installé sur cet ordinateur. Dans PowerShell, tapez
+              <code>winget install Gyan.FFmpeg</code>, puis fermez et rouvrez le terminal et relancez le site.
+            </div>
+            <div id="fileField">
+              <label class="field">Ta vidéo (le même fichier que le lien analysé)
+                <input type="file" id="file" accept="video/*,.mkv" />
+              </label>
+            </div>
+            <label class="check" id="captionsRow"><input type="checkbox" id="captions" checked /> <span>Sous-titres incrustés (jaune pour le mot prononcé)</span></label>
+            <label class="check"><input type="checkbox" id="blurOnly" /> <span>Garder la vidéo entière au milieu, avec du flou en haut et en bas</span></label>
+            <div class="btnrow">
+              <button class="primary" id="make" type="button" disabled>Créer le Short</button>
+              <button class="ghost" id="makeTop" type="button" disabled>Créer les 3 meilleurs</button>
+            </div>
+            <div class="maker-status" id="makerStatus"></div>
+            <details class="adv">
+              <summary>Options avancées</summary>
+              <div class="two">
+                <label class="field">Début (secondes) <input type="number" id="tStart" min="0" step="1" /></label>
+                <label class="field">Fin (secondes) <input type="number" id="tEnd" min="1" step="1" /></label>
+              </div>
+              <button type="button" class="ghost" id="previewRange" disabled>▶ Voir cet extrait dans le lecteur</button>
+              <label class="field">Cadrage
+                <select id="framing">
+                  <option value="face">Automatique : suit le visage, sinon l'image entière</option>
+                  <option value="auto">Suit l'action de l'image</option>
+                  <option value="center">Centre</option>
+                  <option value="left">Gauche</option>
+                  <option value="right">Droite</option>
+                  <option value="blur">Vidéo entière sur fond flou</option>
+                </select>
+              </label>
+              <button class="ghost" id="refine" type="button" disabled title="Cale le début et la fin sur un silence et tient compte du volume">Affiner à nouveau avec le son</button>
+            </details>
+            <p class="rights">N'utilisez que des vidéos dont vous avez les droits : les vôtres, ou celles d'un partenaire qui vous y autorise.</p>
+          </div>
+          <div class="maker-result" id="makerResult">
+            <div class="step3bar">
+              <button type="button" class="ghost" id="backToMoments">← Choisir un autre moment</button>
+              <button type="button" class="ghost" id="newVideo">Nouvelle vidéo</button>
+            </div>
+            <div class="yt-bar" id="ytBar">YouTube…</div>
+            <div id="result"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+    </div>
+
+    <div class="panel" id="panel-history" hidden>
+      <div id="history"></div>
+    </div>
+
+    <div class="panel" id="panel-conn" hidden>
+      <section class="conn">
+        <h2>Titres et descriptions</h2>
+        <p>Une IA écrit des titres accrocheurs, la description et les hashtags, dans la langue de la vidéo. Sans IA, des titres simples sont utilisés.</p>
+        <label for="titleAI">IA utilisée pour les titres</label>
+        <select id="titleAI">
+          <option value="auto">Automatique (Gemini d'abord, puis Claude)</option>
+          <option value="gemini">Gemini (gratuit)</option>
+          <option value="claude">Claude (payant)</option>
+          <option value="none">Aucune (titres simples)</option>
+        </select>
+        <div class="conn-msg" id="titleNow"></div>
+      </section>
+
+      <section class="conn">
+        <h2>Gemini <span class="conn-state" id="gemState"></span></h2>
+        <p>IA gratuite de Google. Clé gratuite : <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. Elle reste sur ton PC, dans le fichier .env.</p>
+        <label for="gemKey">Clé API Gemini</label>
+        <input type="password" id="gemKey" autocomplete="off" spellcheck="false" placeholder="Colle ta clé ici" />
+        <label for="gemModel">Modèle</label>
+        <input type="text" id="gemModel" autocomplete="off" spellcheck="false" />
+        <div class="row">
+          <button type="button" class="ghost" id="gemSave">Enregistrer</button>
+          <button type="button" class="ghost" id="gemTest">Tester</button>
+          <button type="button" class="linkbtn" id="gemRemove">Retirer la clé</button>
+        </div>
+        <div class="conn-msg" id="gemMsg"></div>
+      </section>
+
+      <section class="conn">
+        <h2>Claude <span class="conn-state" id="claState"></span></h2>
+        <p>IA payante d'Anthropic (facultatif). Clé sur <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</p>
+        <label for="claKey">Clé API Claude</label>
+        <input type="password" id="claKey" autocomplete="off" spellcheck="false" placeholder="Colle ta clé ici" />
+        <label for="claModel">Modèle</label>
+        <input type="text" id="claModel" autocomplete="off" spellcheck="false" />
+        <label class="check"><input type="checkbox" id="claMoments" /> Utiliser aussi Claude pour trouver les meilleurs moments (payant)</label>
+        <div class="row">
+          <button type="button" class="ghost" id="claSave">Enregistrer</button>
+          <button type="button" class="ghost" id="claTest">Tester</button>
+          <button type="button" class="linkbtn" id="claRemove">Retirer la clé</button>
+        </div>
+        <div class="conn-msg" id="claMsg"></div>
+      </section>
+
+      <section class="conn">
+        <h2>Compte YouTube <span class="conn-state" id="ytState"></span></h2>
+        <p>Pour publier tes Shorts sur ta chaîne. Il faut d'abord créer un accès Google Cloud (marche à suivre dans le README, section « Publier sur YouTube »).</p>
+        <div class="yt-bar" id="ytBar3">YouTube…</div>
+        <label for="ggId">ID client Google</label>
+        <input type="text" id="ggId" autocomplete="off" spellcheck="false" placeholder="xxxxxxxx.apps.googleusercontent.com" />
+        <label for="ggSecret">Code secret client</label>
+        <input type="password" id="ggSecret" autocomplete="off" spellcheck="false" placeholder="GOCSPX-…" />
+        <p style="margin-top:10px">URI de redirection à déclarer dans Google Cloud : <code id="redirectUri"></code></p>
+        <div class="row">
+          <button type="button" class="ghost" id="ggSave">Enregistrer</button>
+          <button type="button" class="linkbtn" id="ggRemove">Retirer les identifiants</button>
+        </div>
+        <div class="conn-msg" id="ggMsg"></div>
+      </section>
+    </div>
+
+    <footer>Le lien YouTube fonctionne avec les vidéos qui ont des sous-titres (automatiques ou manuels).</footer>
+  </div>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+    const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+
+    let player = null;
+    let pendingVideoId = null;
+    let currentClips = [];
+    let source = { type: null, videoId: null, captionKey: null, hasTranscript: false, totalSeconds: 0 };
+    let uploaded = null; // { uploadId, name, duration }
+    let target = null; // index de l'extrait choisi
+    let busy = false;
+    let localEnd = null;
+    let localURL = null;
+    const sampler = document.createElement('video'); // lecture cachée, pour la détection de visages
+    sampler.muted = true;
+    sampler.playsInline = true;
+    sampler.preload = 'auto';
+
+    // ---------- Lecteur ----------
+    function onYouTubeIframeAPIReady() {
+      if (pendingVideoId) createPlayer(pendingVideoId);
+    }
+    window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
+
+    function createPlayer(videoId) {
+      if (player && player.loadVideoById) {
+        player.cueVideoById(videoId);
+        return;
+      }
+      if (!(window.YT && YT.Player)) { pendingVideoId = videoId; return; }
+      player = new YT.Player('yt', { videoId, playerVars: { rel: 0, playsinline: 1 } });
+    }
+
+    function showSourceUI() {
+      const local = source.type === 'file';
+      $('yt').style.display = local ? 'none' : '';
+      $('localVideo').style.display = local ? 'block' : 'none';
+    }
+
+    // Lit l'intervalle [start, end] dans le lecteur (YouTube ou fichier local).
+    function playRange(start, end, title) {
+      $('shortTitle').textContent = title || '';
+      $('shortTitle').classList.toggle('on', Boolean(title));
+      $('playing').textContent = `Lecture de l'extrait : ${mmss(start)} → ${mmss(end)}`;
+      if (source.type === 'file') {
+        const v = $('localVideo');
+        localEnd = end;
+        v.currentTime = start;
+        v.play().catch(() => {});
+      } else if (player && player.loadVideoById) {
+        player.loadVideoById({ videoId: source.videoId, startSeconds: start, endSeconds: end });
+      }
+    }
+    $('localVideo').addEventListener('timeupdate', () => {
+      const v = $('localVideo');
+      if (localEnd !== null && v.currentTime >= localEnd) { v.pause(); localEnd = null; }
+    });
+
+    function playClip(i) {
+      const c = currentClips[i];
+      if (!c) return;
+      document.querySelectorAll('.clip').forEach((el, k) => el.classList.toggle('active', k === i));
+      playRange(c.start, c.end, c.title);
+    }
+
+    function setFormat(short) {
+      $('playerFrame').classList.toggle('short', short);
+      $('fmt-short').classList.toggle('on', short);
+      $('fmt-wide').classList.toggle('on', !short);
+    }
+    $('fmt-short').addEventListener('click', () => setFormat(true));
+    $('fmt-wide').addEventListener('click', () => setFormat(false));
+
+    function copy(text, btn) {
+      navigator.clipboard.writeText(text).then(() => {
+        const old = btn.textContent;
+        btn.textContent = 'Copié ✓';
+        setTimeout(() => (btn.textContent = old), 1400);
+      });
+    }
+
+    // ---------- Liste des extraits ----------
+    function renderClips() {
+      if (!currentClips.length) {
+        $('clips').innerHTML = '<div class="clip">Aucun moment pertinent trouvé dans cette vidéo.</div>';
+        return;
+      }
+      $('clips').innerHTML = currentClips.map((c, i) => `
+        <div class="clip" data-i="${i}">
+          <div class="clip-top">
+            <h3>${i + 1}. ${esc(c.title)}</h3>
+            <span class="score">${c.score}/100</span>
+          </div>
+          <div class="time">${esc(c.startLabel)} → ${esc(c.endLabel)} · ${c.duration}s</div>
+          ${c.hook ? `<div class="hook">« ${esc(c.hook)} »</div>` : ''}
+          <p class="reason">${esc(c.reason)}</p>
+          ${c.tags && c.tags.length ? `<div class="tags">${c.tags.map((t) => `<span>#${esc(t)}</span>`).join('')}</div>` : ''}
+          <div class="actions">
+            <button data-act="play" data-i="${i}">▶ Voir l'extrait</button>
+            <button data-act="make" data-i="${i}">🎬 Créer le Short</button>
+            <button data-act="text" data-i="${i}">Copier titre + description</button>
+            <button data-act="copy" data-i="${i}">Copier les timecodes</button>
+            ${c.link ? `<a href="${esc(c.link)}" target="_blank" rel="noopener">Ouvrir sur YouTube</a>` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function render(data) {
+      source = { type: data.videoId ? 'youtube' : 'file', videoId: data.videoId, captionKey: data.captionKey || null, hasTranscript: Boolean(data.hasTranscript), totalSeconds: data.totalSeconds || 0 };
+      currentClips = data.clips;
+      $('summary').textContent = [data.notice, data.summary].filter(Boolean).join(' ');
+      $('playing').textContent = '';
+      $('shortTitle').classList.remove('on');
+      $('captions').disabled = !source.hasTranscript;
+      $('captions').checked = source.hasTranscript;
+      $('captionsRow').classList.toggle('off', !source.hasTranscript);
+      $('captionsRow').title = source.hasTranscript ? '' : 'Disponible avec un lien YouTube ou un fichier de sous-titres (.srt / .vtt)';
+      showSourceUI();
+      if (source.type === 'youtube') createPlayer(data.videoId);
+      renderClips();
+      updateButtons();
+      goStep(2);
+    }
+
+    // ---------- Étapes : 1 Ta vidéo, 2 Choisis un moment, 3 Ton Short ----------
+    let step = 1;
+    function goStep(n) {
+      step = n;
+      $('step1Box').style.display = n === 1 ? '' : 'none';
+      $('results').style.display = n === 1 ? 'none' : 'block';
+      document.querySelector('#results .layout').style.display = n === 3 ? 'none' : '';
+      $('makerLeft').style.display = n === 3 ? 'none' : '';
+      $('makerResult').style.display = n === 3 ? '' : 'none';
+      $('makerGrid').style.gridTemplateColumns = n === 3 ? 'minmax(0, 420px)' : '';
+      $('makerGrid').style.justifyContent = n === 3 ? 'center' : '';
+      $('makerTitle').textContent = n === 3 ? 'Ton Short est prêt' : 'Créer le Short';
+      if (n === 3) $('maker').style.display = 'block';
+      for (let i = 1; i <= 3; i++) {
+        const el = $('step-' + i);
+        el.classList.toggle('on', i === n);
+        el.classList.toggle('done', i < n);
+      }
+      if (n === 3 && !$('result').children.length) goStep(2);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    $('backToMoments').addEventListener('click', () => goStep(2));
+    $('newVideo').addEventListener('click', () => {
+      $('url').value = '';
+      resetMaker();
+      setStatus('');
+      goStep(1);
+    });
+
+    $('clips').addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-act]');
+      if (!btn) return;
+      const i = Number(btn.dataset.i);
+      const c = currentClips[i];
+      if (btn.dataset.act === 'play') playClip(i);
+      if (btn.dataset.act === 'make') openMaker(i);
+      if (btn.dataset.act === 'text') copy(`${c.title}\n\n${c.description || '#Shorts'}`, btn);
+      if (btn.dataset.act === 'copy') copy(`${c.startLabel} - ${c.endLabel} | ${c.title}`, btn);
+    });
+
+    // ---------- Envoi du fichier ----------
+    function setLocalFile(file) {
+      if (localURL) URL.revokeObjectURL(localURL);
+      localURL = URL.createObjectURL(file);
+      sampler.src = localURL;
+      $('localVideo').src = localURL;
+    }
+
+    function uploadFile(file, onProgress) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/upload?name=' + encodeURIComponent(file.name));
+        xhr.setRequestHeader('content-type', 'application/octet-stream');
+        xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(Math.round((100 * e.loaded) / e.total)); };
+        xhr.onerror = () => reject(new Error("Impossible d'envoyer le fichier : le serveur est-il bien lancé ?"));
+        xhr.onload = () => {
+          let d = {};
+          try { d = JSON.parse(xhr.responseText); } catch (e) { /* réponse vide */ }
+          if (xhr.status !== 200) return reject(new Error(d.error || "Le fichier n'a pas pu être envoyé."));
+          resolve(d);
+        };
+        xhr.send(file);
+      });
+    }
+
+    async function post(url, body) {
+      const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      let d = {};
+      try { d = await res.json(); } catch (e) { /* réponse vide */ }
+      if (!res.ok) throw new Error(d.error || 'Erreur inconnue.');
+      return d;
+    }
+
+    // ---------- Atelier : créer le Short ----------
+    function setMakerStatus(text, cls = '', spinner = false) {
+      const st = $('makerStatus');
+      st.className = 'maker-status' + (cls ? ' ' + cls : '');
+      st.innerHTML = (spinner ? '<span class="spinner"></span>' : '') + esc(text);
+    }
+
+    function updateButtons() {
+      const ready = Boolean(uploaded) && !busy;
+      $('make').disabled = !(ready && target !== null);
+      $('makeTop').disabled = !(ready && currentClips.length);
+      $('refine').disabled = !(ready && currentClips.length);
+      $('previewRange').disabled = target === null || busy;
+    }
+
+    function resetMaker() {
+      uploaded = null;
+      target = null;
+      $('file').value = '';
+      $('maker').style.display = 'none';
+      $('result').innerHTML = '';
+      setMakerStatus('');
+      updateButtons();
+    }
+
+    function openMaker(i) {
+      const c = currentClips[i];
+      target = i;
+      $('maker').style.display = 'block';
+      $('makerTarget').textContent = `Extrait ${i + 1} : ${c.title} (${c.startLabel} → ${c.endLabel})`;
+      $('tStart').value = c.start;
+      $('tEnd').value = c.end;
+      $('fileField').style.display = source.type === 'file' ? 'none' : '';
+      if (uploaded) setMakerStatus(`Fichier prêt : ${uploaded.name}`);
+      updateButtons();
+      $('maker').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    $('previewRange').addEventListener('click', () => {
+      const s = Number($('tStart').value);
+      const e = Number($('tEnd').value);
+      if (!(e > s)) return setMakerStatus('La fin doit être après le début.', 'error');
+      const c = currentClips[target];
+      playRange(s, e, c ? c.title : '');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    $('file').addEventListener('change', async () => {
+      const f = $('file').files[0];
+      uploaded = null;
+      updateButtons();
+      if (!f) return;
+      setLocalFile(f);
+      setMakerStatus('Envoi du fichier… 0 %', '', true);
+      try {
+        const d = await uploadFile(f, (p) => setMakerStatus(`Envoi du fichier… ${p} %`, '', true));
+        uploaded = { uploadId: d.uploadId, name: f.name, duration: d.duration };
+        const total = source.totalSeconds;
+        if (total && Math.abs(d.duration - total) > Math.max(15, 0.05 * total)) {
+          setMakerStatus(`Fichier reçu, mais il dure ${mmss(d.duration)} alors que la vidéo analysée dure ${mmss(total)} : vérifiez que c'est la même, sinon l'extrait sera décalé.`, 'warn');
+        } else {
+          setMakerStatus(`Fichier prêt : ${f.name}`);
+        }
+      } catch (err) {
+        setMakerStatus(err.message, 'error');
+      }
+      updateButtons();
+      // Affinage automatique avec le son : début et fin calés sur un silence (une seule fois par fichier).
+      if (uploaded && source.type === 'youtube' && currentClips.length && !autoRefined.has(uploaded.uploadId)) {
+        autoRefined.add(uploaded.uploadId);
+        $('refine').click();
+      }
+    });
+    const autoRefined = new Set();
+
+    // ----- Détection de visages (MediaPipe, chargé seulement quand on en a besoin)
+    const MP_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+    const MP_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite';
+    let detectorPromise = null;
+    function loadDetector() {
+      if (!detectorPromise) {
+        detectorPromise = (async () => {
+          try {
+            const mod = await import(`${MP_BASE}/vision_bundle.mjs`);
+            const fileset = await mod.FilesetResolver.forVisionTasks(`${MP_BASE}/wasm`);
+            return await mod.FaceDetector.createFromOptions(fileset, {
+              baseOptions: { modelAssetPath: MP_MODEL },
+              runningMode: 'IMAGE',
+              minDetectionConfidence: 0.5,
+            });
+          } catch (e) {
+            detectorPromise = null;
+            throw new Error('chargement du détecteur impossible, connexion internet ?');
+          }
+        })();
+      }
+      return detectorPromise;
+    }
+
+    function waitFor(el, okEvent, ms = 15000) {
+      return new Promise((resolve, reject) => {
+        const t = setTimeout(() => done(new Error('délai dépassé')), ms);
+        const done = (err) => {
+          clearTimeout(t);
+          el.removeEventListener(okEvent, ok);
+          el.removeEventListener('error', bad);
+          err ? reject(err) : resolve();
+        };
+        const ok = () => done();
+        const bad = () => done(new Error('ce format de fichier ne peut pas être lu par le navigateur'));
+        el.addEventListener(okEvent, ok);
+        el.addEventListener('error', bad);
+      });
+    }
+    async function seekTo(v, t) {
+      if (Math.abs(v.currentTime - t) < 0.01) return;
+      const p = waitFor(v, 'seeked', 8000);
+      v.currentTime = t;
+      await p;
+    }
+
+    // Position horizontale du visage (0..1) toutes les 0,5 s, depuis le début de l'extrait.
+    async function sampleFaces(start, end, onProgress) {
+      const detector = await loadDetector();
+      if (sampler.readyState < 2) await waitFor(sampler, 'loadeddata');
+      const stop = Math.min(end, sampler.duration || end);
+      const step = 0.5;
+      const n = Math.floor((stop - start) / step) + 1;
+      const samples = [];
+      for (let k = 0; k < n; k++) {
+        const t = Math.min(stop, start + k * step);
+        await seekTo(sampler, t);
+        let x = null;
+        let extra = {};
+        try {
+          const faces = [];
+          for (const d of detector.detect(sampler).detections || []) {
+            const b = d.boundingBox;
+            faces.push({ area: b.width * b.height, cx: (b.originX + b.width / 2) / sampler.videoWidth, l: b.originX / sampler.videoWidth, r: (b.originX + b.width) / sampler.videoWidth, h: b.height / sampler.videoHeight });
+          }
+          if (faces.length) {
+            faces.sort((a, b) => b.area - a.area);
+            const main = faces[0];
+            // on ignore les tout petits visages (arrière-plan) pour compter les personnes
+            const group = faces.filter((f) => f.area >= main.area * 0.25);
+            x = Math.min(1, Math.max(0, main.cx));
+            extra = {
+              fh: Math.round(main.h * 1000) / 1000,
+              l: Math.round(Math.min(...group.map((f) => f.l)) * 1000) / 1000,
+              r: Math.round(Math.max(...group.map((f) => f.r)) * 1000) / 1000,
+              n: group.length,
+            };
+          }
+        } catch (e) { /* image sans visage */ }
+        samples.push({ t: Math.round((t - start) * 100) / 100, x, ...extra });
+        onProgress(k + 1, n);
+      }
+      return samples;
+    }
+
+    // ----- Création d'un Short (détection, découpe, affichage)
+    async function buildShort({ start, end, title, titles, description }, label = '') {
+      let framing = $('blurOnly').checked ? 'blur' : $('framing').value;
+      let samples = null;
+      const notes = [];
+      if (framing === 'face') {
+        try {
+          samples = await sampleFaces(start, end, (k, n) => setMakerStatus(`${label}Détection du visage… ${k}/${n}`, '', true));
+        } catch (e) {
+          framing = 'auto';
+          notes.push(`La détection du visage n'a pas pu se faire (${e.message}) : cadrage « suit l'action » utilisé.`);
+        }
+      }
+      setMakerStatus(`${label}Création du Short… (de quelques secondes à une minute)`, '', true);
+      const d = await post('/api/cut', {
+        uploadId: uploaded.uploadId,
+        start,
+        end,
+        framing,
+        samples,
+        captions: $('captions').checked && source.hasTranscript,
+        title,
+        videoId: source.videoId,
+        captionKey: source.captionKey,
+      });
+      if (d.note) notes.push(d.note);
+      addResult(d, { title, titles, description, note: notes.join(' ') });
+      loadHistory();
+    }
+
+    async function runBusy(fn) {
+      busy = true;
+      updateButtons();
+      try {
+        await fn();
+      } catch (err) {
+        setMakerStatus(err.message, 'error');
+      } finally {
+        busy = false;
+        updateButtons();
+      }
+    }
+
+    $('make').addEventListener('click', () => {
+      if (!uploaded || target === null) return;
+      const start = Number($('tStart').value);
+      const end = Number($('tEnd').value);
+      if (!(start >= 0) || !(end > start)) return setMakerStatus('La fin doit être après le début.', 'error');
+      if (end - start > 120) return setMakerStatus('Un Short dure 120 secondes au maximum ici.', 'error');
+      const c = currentClips[target];
+      runBusy(async () => {
+        $('result').querySelectorAll('.res-card').forEach((el) => el.classList.add('old'));
+        await buildShort({ start, end, title: c.title, titles: c.titles, description: c.description || '#Shorts' });
+        setMakerStatus('Short prêt.');
+        goStep(3);
+      });
+    });
+
+    $('makeTop').addEventListener('click', () => {
+      if (!uploaded) return;
+      const top = currentClips.slice(0, 3);
+      runBusy(async () => {
+        for (let i = 0; i < top.length; i++) {
+          const c = top[i];
+          await buildShort({ start: c.start, end: c.end, title: c.title, titles: c.titles, description: c.description || '#Shorts' }, `Short ${i + 1}/${top.length} : `);
+        }
+        setMakerStatus(`${top.length} Shorts prêts.`);
+        goStep(3);
+      });
+    });
+
+    $('refine').addEventListener('click', () => {
+      if (!uploaded) return;
+      runBusy(async () => {
+        setMakerStatus('Analyse du son…', '', true);
+        const keepTitle = target !== null ? currentClips[target].title : null;
+        const d = await post('/api/refine', { uploadId: uploaded.uploadId, videoId: source.videoId, clips: currentClips });
+        currentClips = d.clips;
+        renderClips();
+        if (keepTitle !== null) {
+          const i = currentClips.findIndex((c) => c.title === keepTitle);
+          if (i >= 0) openMaker(i);
+        }
+        setMakerStatus('Extraits ajustés avec le son : début et fin calés sur un silence, scores mis à jour.');
+      });
+    });
+
+    // ---------- YouTube : connexion et publication ----------
+    let yt = { configured: false, connected: false };
+    async function refreshYT() {
+      try {
+        yt = await (await fetch('/api/youtube/status')).json();
+      } catch (e) {
+        yt = { configured: false, connected: false };
+      }
+      let html;
+      if (!yt.configured) {
+        html = 'Publication YouTube non configurée : ajoute tes identifiants Google dans l\'onglet Connexions.';
+      } else if (!yt.connected) {
+        html = 'YouTube : chaîne non connectée.<br><a class="btn" href="/auth/google">Connecter ma chaîne YouTube</a>';
+      } else {
+        html = `YouTube connecté${yt.channel ? ' : <b>' + esc(yt.channel) + '</b>' : ''}. <button type="button" class="linkbtn yt-off">Déconnecter</button>`;
+      }
+      for (const bar of [$('ytBar'), $('ytBar3')]) {
+        bar.innerHTML = html;
+        const off = bar.querySelector('.yt-off');
+        if (off) off.addEventListener('click', async () => {
+          await fetch('/api/youtube/disconnect', { method: 'POST' });
+          refreshYT();
+        });
+      }
+      document.querySelectorAll('.pub-btn').forEach(syncPubBtn);
+    }
+
+    const PRIV = { private: 'privée', unlisted: 'non répertoriée', public: 'publique' };
+
+    function syncPubBtn(btn) {
+      const card = btn.closest('.res-card');
+      const ok = card.querySelector('.rights-ok').checked;
+      btn.disabled = !(yt.configured && yt.connected && ok);
+      const why = !yt.configured ? "Publication non configurée : onglet Connexions." : !yt.connected ? 'Connecte ta chaîne YouTube (onglet Connexions).' : !ok ? "Coche « J'ai l'autorisation » pour publier." : '';
+      btn.title = why;
+      const hint = card.querySelector('.pub-hint');
+      if (hint) hint.textContent = why;
+    }
+
+    function addResult(d, { title, titles, description, note }, target = $('result')) {
+      const el = document.createElement('div');
+      el.className = 'res-card';
+      el.innerHTML = `
+        <video src="${esc(d.url)}" controls loop playsinline></video>
+        <a class="dl" href="${esc(d.url)}" download="${esc(d.name)}">⬇ Télécharger le Short</a>
+        ${note ? `<div class="res-note">${esc(note)}</div>` : ''}
+        <details class="pub">
+          <summary>Publier sur YouTube</summary>
+          <label class="field">Titre <input type="text" class="p-title" maxlength="100" /></label>
+          <div class="ideas"></div>
+          <label class="field">Description <textarea class="p-desc" rows="4"></textarea></label>
+          <label class="field">Visibilité
+            <select class="p-priv">
+              <option value="private">Privée (pour vérifier d'abord)</option>
+              <option value="unlisted">Non répertoriée</option>
+              <option value="public">Publique</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" class="rights-ok" /> <span>J'ai l'autorisation de publier cette vidéo (elle est à moi, ou son créateur est d'accord).</span></label>
+          <button type="button" class="primary pub-btn" disabled>Publier</button>
+          <div class="pub-hint rights"></div>
+          <div class="pub-status"></div>
+        </details>`;
+      el.querySelector('.p-title').value = title || '';
+      const ideas = [...new Set((titles || []).filter((t) => t && t !== title))].slice(0, 4);
+      if (ideas.length) {
+        const box = el.querySelector('.ideas');
+        box.innerHTML = '<span class="rights">Autres idées de titre :</span>';
+        for (const t of ideas) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'idea';
+          b.textContent = t;
+          b.addEventListener('click', () => {
+            const ti = el.querySelector('.p-title');
+            const de = el.querySelector('.p-desc');
+            const old = ti.value;
+            if (old && de.value.startsWith(old)) de.value = t + de.value.slice(old.length); // garde le titre de la description à jour
+            ti.value = t;
+          });
+          box.append(b);
+        }
+      }
+      el.querySelector('.p-desc').value = description || '#Shorts';
+      const btn = el.querySelector('.pub-btn');
+      el.querySelector('.rights-ok').addEventListener('change', () => syncPubBtn(btn));
+      btn.addEventListener('click', async () => {
+        const st = el.querySelector('.pub-status');
+        st.className = 'pub-status';
+        st.innerHTML = '<span class="spinner"></span>Envoi sur YouTube… (peut durer une minute)';
+        btn.disabled = true;
+        try {
+          const r = await post('/api/publish', {
+            name: d.name,
+            title: el.querySelector('.p-title').value,
+            description: el.querySelector('.p-desc').value,
+            privacy: el.querySelector('.p-priv').value,
+            rightsConfirmed: el.querySelector('.rights-ok').checked,
+          });
+          st.className = 'pub-status ok';
+          let msg = `Publié : <a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url)}</a>`;
+          if (r.privacy !== r.requested) {
+            msg += `<br>YouTube a laissé la vidéo en « ${esc(PRIV[r.privacy] || r.privacy)} » au lieu de « ${esc(PRIV[r.requested] || r.requested)} » : cela peut arriver avec un projet Google non validé. Changez la visibilité dans YouTube Studio.`;
+          }
+          st.innerHTML = msg;
+        } catch (err) {
+          st.className = 'pub-status error';
+          st.textContent = err.message;
+          syncPubBtn(btn);
+        }
+      });
+      if (target === $('result')) target.prepend(el); else target.append(el);
+      syncPubBtn(btn);
+      return el;
+    }
+
+    // ---------- Historique ----------
+    async function loadHistory() {
+      try {
+        const { items } = await (await fetch('/api/history')).json();
+        $('history').innerHTML = items.length
+          ? '<p class="h-note">Tous les Shorts créés sur ce PC. Tu peux les revoir et les télécharger à nouveau.</p><div class="h-grid">' + items.map((it) => `
+              <div class="h-card">
+                <video src="${esc(it.url)}" controls preload="metadata" playsinline></video>
+                <div class="h-meta">
+                  <b>${esc(it.title || it.source || it.name)}</b>
+                  <span>${esc(new Date(it.date).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }))} · ${it.duration ? it.duration + ' s · ' : ''}${(it.size / 1048576).toFixed(1)} Mo</span>
+                  <a href="${esc(it.url)}" download="${esc(it.name)}">⬇ Télécharger</a>
+                </div>
+              </div>`).join('') + '</div>'
+          : '<p class="rights">Aucun Short pour l\'instant : crée-en un dans l\'onglet « Créer un Short ».</p>';
+      } catch (e) {
+        $('history').textContent = "Impossible de lire l'historique.";
+      }
+    }
+
+    // ---------- Analyse d'un lien ou d'un fichier ----------
+    function setStatus(text, cls = '', spinner = false) {
+      const s = $('status');
+      s.className = 'status' + (cls ? ' ' + cls : '');
+      s.innerHTML = (spinner ? '<span class="spinner"></span>' : '') + esc(text);
+    }
+
+    function targetSeconds() { return Number($('target').value) || 40; }
+
+    $('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url = $('url').value.trim();
+      if (!url) return;
+      setStatus('Analyse en cours… (10 à 30 secondes)', '', true);
+      $('go').disabled = true;
+      goStep(1);
+      resetMaker();
+      try {
+        const data = await post('/api/analyze', { url, target: targetSeconds() });
+        setStatus(`${data.clips.length} moments trouvés${data.mode === 'simple' ? ' (analyse simple, sans IA)' : ''}.`);
+        render(data);
+      } catch (err) {
+        setStatus(err.message, 'error');
+      } finally {
+        $('go').disabled = false;
+      }
+    });
+
+    let subsText = null;
+    $('subsBtn').addEventListener('click', () => $('subsInput').click());
+    $('subsInput').addEventListener('change', async () => {
+      const f = $('subsInput').files[0];
+      $('subsInput').value = '';
+      subsText = f ? await f.text() : null;
+      $('subsName').textContent = f ? f.name + ' (sera utilisé pour le prochain fichier)' : '';
+    });
+
+    $('fileMode').addEventListener('click', () => $('fileModeInput').click());
+    $('fileModeInput').addEventListener('change', async () => {
+      const f = $('fileModeInput').files[0];
+      $('fileModeInput').value = '';
+      if (!f) return;
+      goStep(1);
+      resetMaker();
+      setLocalFile(f);
+      setStatus('Envoi du fichier… 0 %', '', true);
+      try {
+        const up = await uploadFile(f, (p) => setStatus(`Envoi du fichier… ${p} %`, '', true));
+        setStatus("Analyse du son… (quelques secondes)", '', true);
+        const data = await post('/api/analyze-file', { uploadId: up.uploadId, target: targetSeconds(), subtitles: subsText });
+        uploaded = { uploadId: up.uploadId, name: f.name, duration: up.duration };
+        if (data.hasTranscript) setStatus(`${data.clips.length} moments trouvés (d'après vos sous-titres).`);
+        else setStatus(`${data.clips.length} moments trouvés (analyse du son, sans texte).`, 'warn');
+        render(data);
+      } catch (err) {
+        setStatus(err.message, 'error');
+      }
+    });
+
+    // ---------- Connexions (clés IA, YouTube) ----------
+    function msg(id, text, kind) { const el = $(id); el.textContent = text || ''; el.className = 'conn-msg' + (kind ? ' ' + kind : ''); }
+    function fillConn(c) {
+      $('titleAI').value = c.titles.pref;
+      const names = { gemini: 'Gemini (gratuit)', claude: 'Claude', none: 'aucune IA : titres simples' };
+      msg('titleNow', 'Titres écrits par : ' + names[c.titles.provider], c.titles.provider === 'none' ? '' : 'ok');
+      $('gemState').textContent = c.gemini.set ? 'clé enregistrée ' + c.gemini.hint : 'pas de clé';
+      $('gemState').classList.toggle('on', c.gemini.set);
+      $('gemModel').value = c.gemini.model;
+      $('claState').textContent = c.claude.set ? 'clé enregistrée ' + c.claude.hint : 'pas de clé';
+      $('claState').classList.toggle('on', c.claude.set);
+      $('claModel').value = c.claude.model;
+      $('claMoments').checked = c.claude.moments;
+      $('claMoments').disabled = !c.claude.set;
+      $('redirectUri').textContent = c.redirectUri;
+      $('ggId').placeholder = c.google.idSet ? 'enregistré : ' + c.google.idHint + ' (laisse vide pour garder)' : 'xxxxxxxx.apps.googleusercontent.com';
+      $('ggSecret').placeholder = c.google.secretSet ? 'enregistré (laisse vide pour garder)' : 'GOCSPX-…';
+      $('ytState').textContent = c.google.idSet && c.google.secretSet ? 'identifiants enregistrés' : 'à configurer';
+      $('ytState').classList.toggle('on', c.google.idSet && c.google.secretSet);
+    }
+    async function loadConn() {
+      try { fillConn(await (await fetch('/api/settings')).json()); } catch { msg('titleNow', 'Impossible de lire les réglages.', 'error'); }
+    }
+    async function saveConn(body, msgId, okText) {
+      msg(msgId, 'Enregistrement…');
+      try {
+        const r = await post('/api/settings', body);
+        fillConn(r.settings);
+        msg(msgId, okText, 'ok');
+        refreshYT();
+        return true;
+      } catch (err) {
+        msg(msgId, err.message, 'error');
+        return false;
+      }
+    }
+    async function testConn(provider, keyId, modelId, msgId) {
+      msg(msgId, 'Test en cours…');
+      try {
+        const r = await post('/api/settings/test', { provider, key: $(keyId).value, model: $(modelId).value });
+        msg(msgId, r.message, r.ok ? 'ok' : 'error');
+      } catch (err) { msg(msgId, err.message, 'error'); }
+    }
+    $('titleAI').addEventListener('change', () => saveConn({ titleAI: $('titleAI').value }, 'titleNow', 'Choix enregistré.').then(loadConn));
+    $('gemSave').addEventListener('click', async () => {
+      if (await saveConn({ geminiKey: $('gemKey').value, geminiModel: $('gemModel').value }, 'gemMsg', 'Enregistré. Clique sur Tester pour vérifier.')) $('gemKey').value = '';
+    });
+    $('gemTest').addEventListener('click', () => testConn('gemini', 'gemKey', 'gemModel', 'gemMsg'));
+    $('gemRemove').addEventListener('click', () => saveConn({ remove: ['gemini'] }, 'gemMsg', 'Clé retirée.'));
+    $('claSave').addEventListener('click', async () => {
+      if (await saveConn({ claudeKey: $('claKey').value, claudeModel: $('claModel').value, claudeMoments: $('claMoments').checked }, 'claMsg', 'Enregistré. Clique sur Tester pour vérifier.')) $('claKey').value = '';
+    });
+    $('claTest').addEventListener('click', () => testConn('claude', 'claKey', 'claModel', 'claMsg'));
+    $('claRemove').addEventListener('click', () => saveConn({ remove: ['claude'] }, 'claMsg', 'Clé retirée.'));
+    $('ggSave').addEventListener('click', async () => {
+      if (await saveConn({ googleId: $('ggId').value, googleSecret: $('ggSecret').value }, 'ggMsg', 'Enregistré. Clique sur « Connecter ma chaîne YouTube ».')) { $('ggId').value = ''; $('ggSecret').value = ''; }
+    });
+    $('ggRemove').addEventListener('click', () => saveConn({ remove: ['google'] }, 'ggMsg', 'Identifiants retirés.'));
+
+    // ---------- Démarrage ----------
+    fetch('/api/status')
+      .then((r) => r.json())
+      .then((s) => { if (!s.ffmpeg) $('ffmpegNotice').style.display = 'block'; })
+      .catch(() => {});
+    goStep(1);
+    refreshYT();
+    loadHistory();
+    function showTab(name) {
+      document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
+      for (const p of ['create', 'history', 'conn']) $('panel-' + p).hidden = p !== name;
+      if (name === 'history') loadHistory();
+      if (name === 'conn') loadConn();
+      try { localStorage.setItem('tab', name); } catch (e) { /* facultatif */ }
+    }
+    $('tabs').addEventListener('click', (e) => { const b = e.target.closest('.tab'); if (b) showTab(b.dataset.tab); });
+
+    const q = new URLSearchParams(location.search);
+    if (q.get('youtube') === 'connected') setStatus('Chaîne YouTube connectée.');
+    if (q.get('youtube') === 'error') setStatus('Connexion YouTube impossible : ' + (q.get('msg') || 'erreur inconnue.'), 'error');
+    if (q.get('youtube')) history.replaceState(null, '', location.pathname);
+  </script>
+</body>
+</html>
