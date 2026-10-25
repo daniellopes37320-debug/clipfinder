@@ -2,6 +2,8 @@
 // Une seule requête par analyse (tous les extraits ensemble) pour rester dans les limites gratuites.
 // En cas d'échec (clé absente, quota, réseau, réponse illisible), on garde les titres « règles » déjà calculés.
 
+import { detectLang, LANG_NAMES } from './lang.js';
+
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
 const TIMEOUT_MS = 30_000;
 
@@ -25,7 +27,13 @@ const cutTo = (s, n) => (s.length <= n ? s : s.slice(0, n - 1).replace(/\s+\S*$/
 const tagOf = (s) => clean(s).replace(/^#+/, '').replace(/[^\p{L}\p{N}_]/gu, '').slice(0, 30);
 
 function userPrompt({ videoTitle, channel, clips }) {
+  // Langue de la vidéo : détectée sur le texte parlé, sinon sur le titre d'origine.
+  const lang = detectLang(clips.map((c) => c.text).join(' ')) || detectLang(videoTitle);
+  const rule = lang
+    ? `LANGUE OBLIGATOIRE pour tous les titres, descriptions et hashtags : ${LANG_NAMES[lang]} (la langue de la vidéo), même si ces consignes sont en français.\n\n`
+    : 'Écris les titres, descriptions et hashtags dans la langue parlée dans la vidéo (pas forcément le français).\n\n';
   return (
+    rule +
     `Vidéo d'origine : « ${clean(videoTitle) || 'inconnue'} »${channel ? ` (chaîne : ${clean(channel)})` : ''}\n\n` +
     'Extraits :\n' +
     clips.map((c, i) => `#${i} (${Math.round(c.start)}s → ${Math.round(c.end)}s) texte : ${c.text ? '« ' + cutTo(clean(c.text), 700) + ' »' : '(aucun texte)'}`).join('\n')

@@ -3,6 +3,7 @@
 // Règles simples, sans IA : on reconnaît le type de contenu (clip musical, podcast/émission, jeu, tuto, humour…)
 // et on applique des modèles de titres adaptés. Plusieurs idées de titres sont proposées.
 import { topKeywords } from './keywords.js';
+import { detectLang, STR } from './lang.js';
 
 const MUSIC_RE = /clip officiel|official (music )?video|official audio|audio officiel|lyrics?( video)?|visuali[sz]er|freestyle|\(clip\)|\bclip\b|\bremix\b|live session/i;
 const TYPES = [
@@ -60,7 +61,8 @@ function splitArtist(clean) {
 }
 
 function cleanHook(h) {
-  let s = String(h || '').replace(/\s+/g, ' ').trim();
+  let s = String(h || '').replace(/&gt;|&lt;|&amp;/g, ' ').replace(/\s+/g, ' ').trim();
+  s = s.replace(/^[>»›\-–—•*\s]+/, '').replace(/^\[[^\]]{1,20}\]\s*/, ''); // marques de dialogue des sous-titres (>>, - …)
   s = s.replace(FILLER_START, '').replace(/[.!?…]+$/, '').trim();
   return cap(s);
 }
@@ -74,35 +76,33 @@ export function buildMetadata(ctx = {}) {
   const { type, tags: typeTags } = detectType(rawName || videoTitle, text);
   const hookT = cleanHook(hook);
   const hasHook = hookT.length >= 12 && !/^moment fort/i.test(hookT);
-  const suffix = part ? ` (partie ${part})` : '';
+  const lang = detectLang(`${text} ${hook}`) || detectLang(`${videoTitle} ${rawName}`) || 'fr';
+  const T = STR[lang];
+  const suffix = part ? ` (${T.part} ${part})` : '';
 
   let titles = [];
   let line = '';
   if (type === 'music') {
     const sp = splitArtist(name);
     if (sp) {
-      titles = [
-        `Le nouveau banger de ${sp.artist} 🔥`,
-        `${sp.artist} – « ${sp.track} » : le nouveau clip 🎬`,
-        `Ce son de ${sp.artist} va tourner en boucle 🎧`,
-      ];
-      line = `🔥 Le nouveau banger de ${sp.artist} : « ${sp.track} »`;
+      titles = T.music(sp.artist, sp.track);
+      line = T.musicLine(sp.artist, sp.track);
     } else {
-      titles = [`Nouveau clip : ${name} 🔥`, `Le nouveau banger : ${name} 🎧`, `${name} : vous connaissez ? 👀`];
-      line = `🔥 Nouveau clip : ${name}`;
+      titles = T.musicNoArtist(name);
+      line = T.musicNoArtistLine(name);
     }
   } else if (hasHook) {
     const h = cut(hookT, 62);
     titles = [h, `${h} 👀`];
     const show = name.replace(/\s*[\[(][^\])]*[\])]/g, '').trim();
-    titles.push(type === 'show' && show ? `${cut(show, 30)} : ${cut(hookT, 55)}` : `À voir : ${cut(hookT, 60)}`);
+    titles.push(type === 'show' && show ? `${cut(show, 30)} : ${cut(hookT, 55)}` : `${T.watch} ${cut(hookT, 60)}`);
     line = hookT.length > 62 ? `💬 « ${cut(hookT, 140)} »` : '';
   } else if (name) {
-    titles = type === 'gaming' ? [`${name} : le meilleur moment 🎮`, `${name} 🔥`] : type === 'tuto' ? [`${name} : l'astuce à retenir 💡`, `${name} 🔥`] : [`${name} 🔥`, `À ne pas manquer : ${name}`];
+    titles = type === 'gaming' ? [`${name} : ${T.bestLow} 🎮`, `${name} 🔥`] : type === 'tuto' ? [`${name} : ${T.tip}`, `${name} 🔥`] : [`${name} 🔥`, `${T.dontMiss} ${name}`];
     titles = titles.map((t, i) => (i === 0 && suffix ? t.replace(/ ?[🔥🎮💡]$/u, '') + suffix : t));
-    titles.push(`${name} : extrait${suffix}`);
+    titles.push(`${name} : ${T.extract}${suffix}`);
   } else {
-    titles = [`Le meilleur moment${suffix} 🔥`];
+    titles = [`${T.best}${suffix} 🔥`];
   }
   if (ctx.title && type !== 'music') titles = [ctx.title, ...titles];
   titles = uniq(titles.map((t) => cut(t, 100)));
@@ -116,11 +116,11 @@ export function buildMetadata(ctx = {}) {
   lines.push(titles[0]);
   lines.push('');
   if (line && line !== titles[0]) lines.push(line);
-  if (source) lines.push(`🎬 Extrait ${type === 'music' ? 'du clip' : 'de'} « ${cut(source, 90)} »${channel ? ` – ${channel}` : ''}`);
-  if (link) lines.push(`👉 Vidéo complète : ${link}`);
-  lines.push('🔔 Abonne-toi pour ne rien rater');
+  if (source) lines.push(`🎬 ${type === 'music' ? T.fromClip : T.fromVideo} « ${cut(source, 90)} »${channel ? ` – ${channel}` : ''}`);
+  if (link) lines.push(`👉 ${T.full} : ${link}`);
+  lines.push(`🔔 ${T.sub}`);
   lines.push('');
   lines.push(tags.map((t) => '#' + t).join(' '));
 
-  return { type, title: titles[0], titles, description: lines.join('\n').replace(/\n{3,}/g, '\n\n'), tags: tags.filter((t) => t !== 'Shorts') };
+  return { type, lang, title: titles[0], titles, description: lines.join('\n').replace(/\n{3,}/g, '\n\n'), tags: tags.filter((t) => t !== 'Shorts') };
 }
