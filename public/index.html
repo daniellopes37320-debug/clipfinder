@@ -6,37 +6,34 @@
   <title>ClipFinder</title>
   <style>
     :root {
-      --bg: #0e0f13;
-      --panel: #171922;
-      --panel-2: #1f2230;
-      --border: #2a2e3f;
-      --text: #eef0f6;
-      --muted: #9aa0b5;
-      --accent: #ff4d5e;
-      --accent-2: #ff8a4d;
+      --bg: #0a0a12;
+      --panel: #12121c;
+      --panel-2: #1a1a28;
+      --border: #2b2b40;
+      --text: #f2f2f8;
+      --muted: #9d9db5;
+      --accent: #7c5cff;
+      --accent-2: #22d3ee;
       --good: #3ddc97;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: radial-gradient(1200px 500px at 50% -200px, #2a1620 0%, var(--bg) 60%);
+      background: radial-gradient(900px 420px at 50% -160px, #1c1744 0%, var(--bg) 65%);
       color: var(--text);
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       line-height: 1.5;
       min-height: 100vh;
     }
     .wrap { max-width: 1000px; margin: 0 auto; padding: 48px 20px 80px; }
-    header { text-align: center; margin-bottom: 36px; }
-    .logo {
-      font-weight: 800; font-size: 14px; letter-spacing: .14em; text-transform: uppercase;
-      color: var(--accent); margin-bottom: 14px;
-    }
-    h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.1; margin: 0 0 12px; }
-    h1 span {
-      background: linear-gradient(90deg, var(--accent), var(--accent-2));
-      -webkit-background-clip: text; background-clip: text; color: transparent;
-    }
-    header p { color: var(--muted); margin: 0 auto; max-width: 560px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
+    .logo { font-weight: 800; font-size: 20px; letter-spacing: -.01em; }
+    .logo i { font-style: normal; color: var(--accent); }
+    .hero { text-align: center; margin: 56px auto 34px; max-width: 640px; }
+    h1 { font-size: clamp(28px, 4.6vw, 42px); line-height: 1.12; letter-spacing: -.02em; margin: 0 0 12px; font-weight: 750; }
+    .hero p { color: var(--muted); margin: 0 auto; font-size: 17px; max-width: 520px; }
+    :focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 
     form { display: flex; gap: 10px; margin-bottom: 10px; }
     input[type=text], input[type=password], input[type=number], select, textarea {
@@ -45,15 +42,16 @@
     }
     input[type=text]:focus, input[type=number]:focus, select:focus, textarea:focus { border-color: var(--accent); }
     #url {
-      flex: 1; min-width: 0; padding: 16px 18px; font-size: 16px; background: var(--panel);
-      border-radius: 12px;
+      flex: 1; min-width: 0; padding: 18px 20px; font-size: 17px; background: var(--panel);
+      border-radius: 14px; border-color: var(--border);
     }
     #target { padding: 0 12px; font-size: 14px; border-radius: 12px; background: var(--panel); }
     button.primary {
-      padding: 0 26px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer;
-      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      padding: 0 28px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer;
+      background: var(--accent);
       border: 0; border-radius: 12px; white-space: nowrap;
     }
+    button.primary:hover:not(:disabled) { filter: brightness(1.12); }
     button.primary:disabled { opacity: .5; cursor: not-allowed; }
     button.ghost {
       font-size: 14px; padding: 12px 16px; border-radius: 10px; cursor: pointer; color: var(--text);
@@ -176,7 +174,7 @@
     .dl {
       display: block; max-width: 300px; margin: 12px auto 0; text-align: center; text-decoration: none;
       font-weight: 700; color: #fff; padding: 12px; border-radius: 10px;
-      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      background: var(--accent);
     }
     .res-note { font-size: 13px; color: var(--accent-2); max-width: 300px; margin: 10px auto 0; }
     .pub { max-width: 300px; margin: 14px auto 0; }
@@ -199,11 +197,10 @@
     .h-meta a:hover { border-color: var(--accent); }
     .h-note { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
 
-    .tabs { display: flex; gap: 6px; margin: 0 0 22px; border-bottom: 1px solid var(--border); overflow-x: auto; }
-    .tab { background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); font: inherit; font-size: 15px; font-weight: 600; padding: 12px 16px; cursor: pointer; white-space: nowrap; }
+    .tabs { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); overflow-x: auto; }
+    .tab { background: none; border: 0; color: var(--muted); font: inherit; font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
     .tab:hover { color: var(--text); }
-    .tab.on { color: var(--text); border-bottom-color: var(--accent); }
-    .src-row { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; font-size: 13px; }
+    .tab.on { color: var(--text); background: var(--panel-2); }
     .ideas { display: flex; flex-direction: column; gap: 6px; margin: -4px 0 12px; align-items: flex-start; }
     .idea { text-align: left; font: inherit; font-size: 13px; color: var(--text); background: var(--panel-2); border: 1px dashed var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer; max-width: 100%; }
     .idea:hover { border-color: var(--accent); }
@@ -222,7 +219,9 @@
     .conn h2 { font-size: 17px; margin: 0 0 4px; }
     .conn p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
     .conn label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
-    .conn input[type=text], .conn input[type=password], .conn select { width: 100%; }
+    .conn input[type=text], .conn input[type=password], .conn select { width: 100%; padding: 11px 12px; font-size: 14px; }
+    a { color: var(--accent-2); }
+    a:hover { color: var(--text); }
     .conn .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
     .conn .check { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 14px; margin-top: 12px; }
     .conn-msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
@@ -230,6 +229,8 @@
     .conn-msg.error { color: #ff7a85; }
     .conn-state { display: inline-block; font-size: 12px; border-radius: 99px; padding: 2px 10px; background: var(--panel-2); color: var(--muted); margin-left: 8px; vertical-align: middle; }
     .conn-state.on { color: var(--good); }
+    .conn-state:empty { display: none; }
+    .conn code { color: var(--text); background: var(--panel-2); padding: 2px 6px; border-radius: 6px; font-size: 12px; overflow-wrap: anywhere; }
     details.more { max-width: 640px; margin: 0 auto 16px; text-align: center; }
     details.more summary { cursor: pointer; color: var(--muted); font-size: 14px; }
     details.more .btnrow { justify-content: center; margin: 10px 0; }
@@ -238,17 +239,19 @@
 </head>
 <body>
   <div class="wrap">
-    <header>
-      <div class="logo">ClipFinder</div>
-      <h1>Crée tes <span>Shorts</span> en quelques clics</h1>
-      <p>Choisis une vidéo, vérifie les extraits proposés, puis télécharge ou publie.</p>
-    </header>
+    <div class="topbar">
+      <div class="logo">Clip<i>Finder</i></div>
+      <nav class="tabs" id="tabs">
+        <button type="button" class="tab on" data-tab="create">Créer un Short</button>
+        <button type="button" class="tab" data-tab="history">Historique</button>
+        <button type="button" class="tab" data-tab="conn">Connexions</button>
+      </nav>
+    </div>
 
-    <nav class="tabs" id="tabs">
-      <button type="button" class="tab on" data-tab="create">Créer un Short</button>
-      <button type="button" class="tab" data-tab="history">Historique</button>
-      <button type="button" class="tab" data-tab="conn">Connexions</button>
-    </nav>
+    <section class="hero" id="hero">
+      <h1>Transforme une vidéo en Shorts</h1>
+      <p>Colle un lien YouTube. ClipFinder repère les meilleurs moments et les met au format vertical, avec sous-titres.</p>
+    </section>
 
     <div class="panel" id="panel-create">
 
@@ -562,7 +565,8 @@
       document.querySelector('#results .layout').style.display = n === 3 ? 'none' : '';
       $('makerLeft').style.display = n === 3 ? 'none' : '';
       $('makerResult').style.display = n === 3 ? '' : 'none';
-      $('makerGrid').style.gridTemplateColumns = n === 3 ? 'minmax(0, 420px)' : '';
+      $('makerGrid').style.gridTemplateColumns = n === 3 ? 'minmax(0, 420px)' : n === 2 ? 'minmax(0, 680px)' : '';
+      $('makerTitle').style.textAlign = n === 3 ? 'center' : '';
       $('makerGrid').style.justifyContent = n === 3 ? 'center' : '';
       $('makerTitle').textContent = n === 3 ? 'Ton Short est prêt' : 'Créer le Short';
       if (n === 3) $('maker').style.display = 'block';
@@ -572,8 +576,11 @@
         el.classList.toggle('done', i < n);
       }
       if (n === 3 && !$('result').children.length) goStep(2);
+      syncHero();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+    let curTab = 'create';
+    function syncHero() { $('hero').style.display = curTab === 'create' && step === 1 ? '' : 'none'; }
     $('backToMoments').addEventListener('click', () => goStep(2));
     $('newVideo').addEventListener('click', () => {
       $('url').value = '';
@@ -1136,6 +1143,8 @@
     refreshYT();
     loadHistory();
     function showTab(name) {
+      curTab = name;
+      syncHero();
       document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
       for (const p of ['create', 'history', 'conn']) $('panel-' + p).hidden = p !== name;
       if (name === 'history') loadHistory();
