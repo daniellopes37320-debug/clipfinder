@@ -21,3 +21,15 @@ test('titres en anglais pour une vidéo anglaise, sans ">>"', () => {
   assert.ok(m.description.includes('Subscribe'));
   assert.ok(!m.description.includes('Abonne'));
 });
+
+import { buildAss } from '../captions.js';
+test('sous-titres automatiques répétés : pas de mots en double', () => {
+  const segs = [
+    { start: 0, dur: 2, text: 'whoa it is also' },
+    { start: 1.5, dur: 2, text: 'it is also a little loose' },
+  ];
+  const ass = buildAss({ segments: segs, start: 0, end: 4 });
+  const txt = ass.split('\n').filter((l) => l.startsWith('Dialogue')).map((l) => l.replace(/\{[^}]*\}/g, '')).join(' ');
+  assert.equal((txt.match(/also/g) || []).length, 1);
+  assert.ok(txt.includes('loose'));
+});
