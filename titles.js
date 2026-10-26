@@ -5,7 +5,8 @@
 import { detectLang, LANG_NAMES, STR } from './lang.js';
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
-const TIMEOUT_MS = 60_000;
+const TIMEOUT_MS = 25_000; // par essai
+const TOTAL_MS = 50_000; // budget total pour les titres : au-delà, on garde les titres simples
 // Si le modèle choisi n'existe pas (404), on essaie ceux-ci à la suite.
 const GEMINI_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
 
@@ -56,10 +57,10 @@ function parseClips(text, who) {
   return Array.isArray(json.clips) ? json.clips : [];
 }
 
-async function geminiOnce({ apiKey, model, videoTitle, channel, clips }) {
+async function geminiOnce({ apiKey, model, videoTitle, channel, clips, timeoutMs = TIMEOUT_MS }) {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
     headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM }] },
@@ -100,14 +101,18 @@ export async function askGemini({ apiKey, model = DEFAULT_GEMINI_MODEL, videoTit
   const tried = [model, ...GEMINI_FALLBACKS.filter((m) => m !== model)];
   let last;
   const busy = (e) => [500, 503, 429].includes(e.status) || e.name === 'TimeoutError';
+  const t0 = Date.now();
+  const left = () => TOTAL_MS - (Date.now() - t0);
+  const once = (m) => geminiOnce({ apiKey, model: m, videoTitle, channel, clips, timeoutMs: Math.min(TIMEOUT_MS, Math.max(3000, left())) });
   for (const m of tried) {
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (left() < 3000) throw last || new Error('délai dépassé');
       try {
-        return await geminiOnce({ apiKey, model: m, videoTitle, channel, clips });
+        return await once(m);
       } catch (e) {
         last = e;
-        if (busy(e) && attempt < 2) {
-          await new Promise((r) => setTimeout(r, attempt ? 6000 : 2500)); // Google surchargé : on réessaie un peu plus tard
+        if ((e.status === 503 || e.status === 429) && attempt === 0 && left() > 8000) {
+          await new Promise((r) => setTimeout(r, 2500)); // Google surchargé : un seul nouvel essai
           continue;
         }
         if (e.status !== 404 && !busy(e)) throw e;
@@ -118,19 +123,20 @@ export async function askGemini({ apiKey, model = DEFAULT_GEMINI_MODEL, videoTit
   }
   // Aucun nom connu ne marche : on demande à Google la liste des modèles disponibles pour cette clé.
   try {
-    const avail = (await listGeminiModels(apiKey)).filter((m) => !tried.includes(m)).slice(0, 3);
-    for (const m of avail) {
-      try {
-        const out = await geminiOnce({ apiKey, model: m, videoTitle, channel, clips });
-        console.warn(`Modèle Gemini utilisé : ${m} (change GEMINI_MODEL pour le fixer).`);
-        return out;
-      } catch (e) {
-        if (e.status !== 404) throw e;
+    if (left() > 6000) {
+      const avail = (await listGeminiModels(apiKey)).filter((m) => !tried.includes(m)).slice(0, 2);
+      for (const m of avail) {
+        if (left() < 3000) break;
+        try {
+          const out = await once(m);
+          console.warn(`Modèle Gemini utilisé : ${m} (change GEMINI_MODEL pour le fixer).`);
+          return out;
+        } catch (e) {
+          last = e;
+        }
       }
     }
-  } catch (e) {
-    if (e.status) throw e;
-  }
+  } catch { /* liste indisponible */ }
   throw last;
 }
 
