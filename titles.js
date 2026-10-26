@@ -5,8 +5,8 @@
 import { detectLang, LANG_NAMES, STR } from './lang.js';
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
-const TIMEOUT_MS = 25_000; // par essai
-const TOTAL_MS = 50_000; // budget total pour les titres : au-delà, on garde les titres simples
+const TIMEOUT_MS = 40_000; // par essai
+const TOTAL_MS = 75_000; // budget total pour les titres : au-delà, on garde les titres simples
 // Si le modèle choisi n'existe pas (404), on essaie ceux-ci à la suite.
 const GEMINI_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
 
@@ -40,7 +40,7 @@ function userPrompt({ videoTitle, channel, clips }) {
     rule +
     `Vidéo d'origine : « ${clean(videoTitle) || 'inconnue'} »${channel ? ` (chaîne : ${clean(channel)})` : ''}\n\n` +
     'Extraits :\n' +
-    clips.map((c, i) => `#${i} (${Math.round(c.start)}s → ${Math.round(c.end)}s) texte : ${c.text ? '« ' + cutTo(clean(c.text), 700) + ' »' : '(aucun texte)'}`).join('\n')
+    clips.map((c, i) => `#${i} (${Math.round(c.start)}s → ${Math.round(c.end)}s) texte : ${c.text ? '« ' + cutTo(clean(c.text), 500) + ' »' : '(aucun texte)'}`).join('\n')
   );
 }
 
@@ -57,7 +57,15 @@ function parseClips(text, who) {
   return Array.isArray(json.clips) ? json.clips : [];
 }
 
-async function geminiOnce({ apiKey, model, videoTitle, channel, clips, timeoutMs = TIMEOUT_MS }) {
+// Réflexion réduite au minimum : les modèles récents « réfléchissent » longtemps, inutile pour écrire des titres.
+function thinkingFor(model) {
+  if (/gemini-3/.test(model)) return { thinkingLevel: 'low' };
+  if (/gemini-2\.5/.test(model) && !/pro/.test(model)) return { thinkingBudget: 0 };
+  return null;
+}
+
+async function geminiOnce({ apiKey, model, videoTitle, channel, clips, timeoutMs = TIMEOUT_MS, thinking = true }) {
+  const think = thinking ? thinkingFor(model) : null;
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',
     signal: AbortSignal.timeout(timeoutMs),
@@ -65,9 +73,10 @@ async function geminiOnce({ apiKey, model, videoTitle, channel, clips, timeoutMs
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM }] },
       contents: [{ role: 'user', parts: [{ text: userPrompt({ videoTitle, channel, clips }) }] }],
-      generationConfig: { temperature: 0.9, maxOutputTokens: 8000, responseMimeType: 'application/json' },
+      generationConfig: { temperature: 0.9, maxOutputTokens: 4000, responseMimeType: 'application/json', ...(think ? { thinkingConfig: think } : {}) },
     }),
   });
+  if (res.status === 400 && think) return geminiOnce({ apiKey, model, videoTitle, channel, clips, timeoutMs, thinking: false }); // ce modèle refuse le réglage
   if (!res.ok) {
     const body = await res.text();
     const hint = res.status === 404 ? ' (modèle introuvable : change GEMINI_MODEL dans .env)' : res.status === 429 ? ' (quota gratuit atteint)' : '';
