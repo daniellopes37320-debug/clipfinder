@@ -1,4 +1,5 @@
 import express from 'express';
+import dns from 'node:dns';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadEnv } from './env.js';
@@ -8,6 +9,7 @@ import { ffmpegAvailable } from './reframe.js';
 import { createSettings } from './settings.js';
 import { cleanOutput } from './cleanup.js';
 import { extractVideoId, fetchSegments, analyzeSegments } from './analysis.js';
+dns.setDefaultResultOrder('ipv4first');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENV_FILE = path.join(__dirname, '.env');

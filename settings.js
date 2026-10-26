@@ -42,14 +42,14 @@ export async function testProvider(provider, { apiKey, model }) {
     if (provider === 'gemini') {
       res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST',
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(45_000),
         headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Réponds uniquement : OK' }] }], generationConfig: { maxOutputTokens: 20 } }),
       });
     } else {
       res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(45_000),
         headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify({ model, max_tokens: 10, messages: [{ role: 'user', content: 'Réponds uniquement : OK' }] }),
       });

@@ -5,7 +5,7 @@
 import { detectLang, LANG_NAMES, STR } from './lang.js';
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
-const TIMEOUT_MS = 30_000;
+const TIMEOUT_MS = 60_000;
 // Si le modèle choisi n'existe pas (404), on essaie ceux-ci à la suite.
 const GEMINI_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
 
