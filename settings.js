@@ -74,7 +74,9 @@ export async function testProvider(provider, { apiKey, model }) {
           ? `Modèle « ${model} » introuvable : change le nom du modèle.${await modelsHint(provider, apiKey)}`
           : res.status === 429
             ? 'Quota atteint pour le moment : réessaie plus tard (la clé est valide).'
-            : `Erreur ${res.status}.`;
+            : res.status === 503 || res.status === 500
+              ? 'Clé et modèle valides, mais Google est surchargé : réessaie dans quelques minutes (le site réessaie tout seul pour les titres).'
+              : `Erreur ${res.status}.`;
     return { ok: false, message: `${why} (${clean(body, [apiKey]).replace(/\s+/g, ' ').slice(0, 120)})` };
   } catch (e) {
     return { ok: false, message: e.name === 'TimeoutError' ? 'Pas de réponse (délai dépassé) : vérifie ta connexion.' : 'Connexion impossible : ' + clean(e.message, [apiKey]) };

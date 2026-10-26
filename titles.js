@@ -99,13 +99,21 @@ export async function listGeminiModels(apiKey) {
 export async function askGemini({ apiKey, model = DEFAULT_GEMINI_MODEL, videoTitle = '', channel = '', clips }) {
   const tried = [model, ...GEMINI_FALLBACKS.filter((m) => m !== model)];
   let last;
+  const busy = (e) => [500, 503, 429].includes(e.status) || e.name === 'TimeoutError';
   for (const m of tried) {
-    try {
-      return await geminiOnce({ apiKey, model: m, videoTitle, channel, clips });
-    } catch (e) {
-      last = e;
-      if (e.status !== 404) throw e; // seul un modèle introuvable justifie d'en essayer un autre
-      console.warn(`Modèle Gemini « ${m} » introuvable, essai suivant.`);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await geminiOnce({ apiKey, model: m, videoTitle, channel, clips });
+      } catch (e) {
+        last = e;
+        if (busy(e) && attempt < 2) {
+          await new Promise((r) => setTimeout(r, attempt ? 6000 : 2500)); // Google surchargé : on réessaie un peu plus tard
+          continue;
+        }
+        if (e.status !== 404 && !busy(e)) throw e;
+        console.warn(`Modèle Gemini « ${m} » indisponible (${e.status || e.name}), essai suivant.`);
+        break;
+      }
     }
   }
   // Aucun nom connu ne marche : on demande à Google la liste des modèles disponibles pour cette clé.
