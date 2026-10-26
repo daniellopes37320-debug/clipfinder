@@ -35,6 +35,17 @@ function clean(text, secrets) {
 }
 
 // Petit appel de vérification : la clé et le modèle répondent-ils ?
+async function modelsHint(provider, apiKey) {
+  if (provider !== 'gemini') return '';
+  try {
+    const { listGeminiModels } = await import('./titles.js');
+    const list = (await listGeminiModels(apiKey)).slice(0, 6);
+    return list.length ? ` Modèles disponibles avec ta clé : ${list.join(', ')}.` : '';
+  } catch {
+    return '';
+  }
+}
+
 export async function testProvider(provider, { apiKey, model }) {
   if (!apiKey) return { ok: false, message: 'Aucune clé enregistrée.' };
   try {
@@ -60,7 +71,7 @@ export async function testProvider(provider, { apiKey, model }) {
       res.status === 400 || res.status === 401 || res.status === 403
         ? 'Clé refusée : vérifie qu\'elle est complète, sans espace.'
         : res.status === 404
-          ? `Modèle « ${model} » introuvable : change le nom du modèle.`
+          ? `Modèle « ${model} » introuvable : change le nom du modèle.${await modelsHint(provider, apiKey)}`
           : res.status === 429
             ? 'Quota atteint pour le moment : réessaie plus tard (la clé est valide).'
             : `Erreur ${res.status}.`;

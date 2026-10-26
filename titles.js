@@ -80,6 +80,22 @@ async function geminiOnce({ apiKey, model, videoTitle, channel, clips }) {
   return parseClips(text, 'Gemini');
 }
 
+// Modèles réellement disponibles pour cette clé (ceux qui savent écrire du texte), les « flash » d'abord.
+export async function listGeminiModels(apiKey) {
+  const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', {
+    signal: AbortSignal.timeout(20_000),
+    headers: { 'x-goog-api-key': apiKey },
+  });
+  if (!res.ok) throw new Error(`Liste des modèles refusée (${res.status})`);
+  const data = await res.json();
+  const names = (data.models || [])
+    .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+    .map((m) => String(m.name || '').replace(/^models\//, ''))
+    .filter((n) => /^gemini-/.test(n) && !/(image|tts|embedding|live|audio|vision|robotics|computer|thinking-exp|-exp|preview-\d{2}-\d{2})/.test(n));
+  const rank = (n) => (/flash-lite/.test(n) ? 1 : /flash/.test(n) ? 0 : 2);
+  return [...new Set(names)].sort((a, b) => rank(a) - rank(b) || b.localeCompare(a, 'en', { numeric: true }));
+}
+
 export async function askGemini({ apiKey, model = DEFAULT_GEMINI_MODEL, videoTitle = '', channel = '', clips }) {
   const tried = [model, ...GEMINI_FALLBACKS.filter((m) => m !== model)];
   let last;
@@ -91,6 +107,21 @@ export async function askGemini({ apiKey, model = DEFAULT_GEMINI_MODEL, videoTit
       if (e.status !== 404) throw e; // seul un modèle introuvable justifie d'en essayer un autre
       console.warn(`Modèle Gemini « ${m} » introuvable, essai suivant.`);
     }
+  }
+  // Aucun nom connu ne marche : on demande à Google la liste des modèles disponibles pour cette clé.
+  try {
+    const avail = (await listGeminiModels(apiKey)).filter((m) => !tried.includes(m)).slice(0, 3);
+    for (const m of avail) {
+      try {
+        const out = await geminiOnce({ apiKey, model: m, videoTitle, channel, clips });
+        console.warn(`Modèle Gemini utilisé : ${m} (change GEMINI_MODEL pour le fixer).`);
+        return out;
+      } catch (e) {
+        if (e.status !== 404) throw e;
+      }
+    }
+  } catch (e) {
+    if (e.status) throw e;
   }
   throw last;
 }
