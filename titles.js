@@ -2,14 +2,17 @@
 // Une seule requête par analyse (tous les extraits ensemble) pour rester dans les limites gratuites.
 // En cas d'échec (clé absente, quota, réseau, réponse illisible), on garde les titres « règles » déjà calculés.
 
-import { detectLang, LANG_NAMES } from './lang.js';
+import { detectLang, LANG_NAMES, STR } from './lang.js';
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.6-flash';
 const TIMEOUT_MS = 30_000;
+// Si le modèle choisi n'existe pas (404), on essaie ceux-ci à la suite.
+const GEMINI_FALLBACKS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
 
 const SYSTEM = `Tu es un expert des YouTube Shorts francophones : tu écris des titres qui donnent envie de cliquer.
 Règles strictes :
 - Chaque titre fait 70 caractères maximum, dans la langue de l'extrait.
+- Un titre est une VRAIE accroche rédigée par toi, qui résume le sujet ou l'enjeu de l'extrait. Ne recopie JAMAIS une phrase prononcée, ni le début du texte, ni de « ... ».
 - Il crée de la curiosité, de l'urgence ou une émotion (question, chiffre, promesse concrète, "tu ne devineras jamais", etc.), avec 0 à 2 emojis maximum.
 - Il reste VRAI : il ne promet rien que l'extrait ne montre pas, n'invente aucun fait, aucun nom, aucun chiffre absents du texte fourni. Pas de MAJUSCULES sur tout le titre.
 - Si le texte d'un extrait est vide ou trop pauvre, base-toi uniquement sur le titre de la vidéo d'origine et reste général.
@@ -53,7 +56,7 @@ function parseClips(text, who) {
   return Array.isArray(json.clips) ? json.clips : [];
 }
 
-export async function askGemini({ apiKey, model = DEFAULT_GEMINI_MODEL, videoTitle = '', channel = '', clips }) {
+async function geminiOnce({ apiKey, model, videoTitle, channel, clips }) {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -61,16 +64,35 @@ export async function askGemini({ apiKey, model = DEFAULT_GEMINI_MODEL, videoTit
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM }] },
       contents: [{ role: 'user', parts: [{ text: userPrompt({ videoTitle, channel, clips }) }] }],
-      generationConfig: { temperature: 0.9, maxOutputTokens: 4000, responseMimeType: 'application/json' },
+      generationConfig: { temperature: 0.9, maxOutputTokens: 8000, responseMimeType: 'application/json' },
     }),
   });
   if (!res.ok) {
     const body = await res.text();
     const hint = res.status === 404 ? ' (modèle introuvable : change GEMINI_MODEL dans .env)' : res.status === 429 ? ' (quota gratuit atteint)' : '';
-    throw new Error(`Gemini ${res.status}${hint} : ${body.slice(0, 160)}`);
+    const err = new Error(`Gemini ${res.status}${hint} : ${body.slice(0, 160)}`);
+    err.status = res.status;
+    throw err;
   }
   const data = await res.json();
-  return parseClips((data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join(''), 'Gemini');
+  const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+  if (!text) throw new Error(`Gemini n'a rien répondu (${data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason || 'raison inconnue'}).`);
+  return parseClips(text, 'Gemini');
+}
+
+export async function askGemini({ apiKey, model = DEFAULT_GEMINI_MODEL, videoTitle = '', channel = '', clips }) {
+  const tried = [model, ...GEMINI_FALLBACKS.filter((m) => m !== model)];
+  let last;
+  for (const m of tried) {
+    try {
+      return await geminiOnce({ apiKey, model: m, videoTitle, channel, clips });
+    } catch (e) {
+      last = e;
+      if (e.status !== 404) throw e; // seul un modèle introuvable justifie d'en essayer un autre
+      console.warn(`Modèle Gemini « ${m} » introuvable, essai suivant.`);
+    }
+  }
+  throw last;
 }
 
 export async function askClaudeTitles({ apiKey, model = 'claude-sonnet-5-5', videoTitle = '', channel = '', clips }) {
@@ -117,10 +139,11 @@ export async function enhanceClips(clips, { segments = null, videoTitle = '', ch
     const body = clean(r.description);
     const lines = [titles[0], ''];
     if (body) lines.push(cutTo(body, 600), '');
-    if (source) lines.push(`🎬 Extrait de « ${cutTo(source, 90)} »${channel ? ` – ${clean(channel)}` : ''}`);
+    const T = STR[detectLang(items[i].text) || detectLang(source) || 'fr'];
+    if (source) lines.push(`🎬 ${T.fromVideo} « ${cutTo(source, 90)} »${channel ? ` – ${clean(channel)}` : ''}`);
     const l = link && c.link ? c.link : '';
-    if (l) lines.push(`👉 Vidéo complète : ${l}`);
-    lines.push('🔔 Abonne-toi pour ne rien rater', '', ['Shorts', ...tags].map((t) => '#' + t).join(' '));
+    if (l) lines.push(`👉 ${T.full} : ${l}`);
+    lines.push(`🔔 ${T.sub}`, '', ['Shorts', ...tags].map((t) => '#' + t).join(' '));
     return {
       ...c,
       title: titles[0],

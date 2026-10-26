@@ -26,19 +26,32 @@ const clean = (s) =>
 export function buildAss({ segments, start, end, width = 1080, height = 1920 }) {
   // 1) Chaque mot reçoit un temps de début/fin proportionnel à sa longueur dans son segment.
   const words = [];
+  let lastEnd = 0;
+  let prev = []; // derniers mots affichés, pour ignorer les répétitions des sous-titres automatiques YouTube
+  const norm = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
   for (const seg of segments || []) {
     const sStart = seg.start;
     const sEnd = seg.start + Math.max(0.2, seg.dur);
     if (sEnd <= start || sStart >= end) continue;
-    const ws = clean(seg.text).split(' ').filter(Boolean);
+    let ws = clean(seg.text).split(' ').filter(Boolean);
+    // Les sous-titres automatiques répètent la fin de la ligne précédente : on retire ce début déjà dit.
+    for (let k = Math.min(prev.length, ws.length, 12); k > 0; k--) {
+      if (prev.slice(-k).every((p, i) => p === norm(ws[i]))) {
+        ws = ws.slice(k);
+        break;
+      }
+    }
     if (!ws.length) continue;
+    prev = [...prev, ...ws.map(norm)].slice(-12);
     const total = ws.reduce((a, w) => a + w.length + 1, 0);
-    let t = sStart;
+    let t = Math.max(sStart, lastEnd); // jamais deux mots en même temps
+    const span = Math.max(0.2, sEnd - t);
     for (const w of ws) {
-      const d = ((w.length + 1) / total) * (sEnd - sStart);
+      const d = ((w.length + 1) / total) * span;
       words.push({ w, a: t, b: t + d });
       t += d;
     }
+    lastEnd = t;
   }
   const inClip = words
     .filter((x) => x.b > start && x.a < end)
