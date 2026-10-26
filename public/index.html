@@ -543,6 +543,8 @@
       source = { type: data.videoId ? 'youtube' : 'file', videoId: data.videoId, captionKey: data.captionKey || null, hasTranscript: Boolean(data.hasTranscript), totalSeconds: data.totalSeconds || 0 };
       currentClips = data.clips;
       $('summary').textContent = [data.notice, data.summary].filter(Boolean).join(' ');
+      $('summary').style.color = data.notice ? '#ffb454' : '';
+      $('summary').style.fontWeight = data.notice ? '600' : '';
       $('playing').textContent = '';
       $('shortTitle').classList.remove('on');
       $('captions').disabled = !source.hasTranscript;
