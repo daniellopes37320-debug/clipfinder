@@ -65,7 +65,7 @@
     }
     .linkbtn:hover { color: var(--text); }
     .alt { text-align: center; margin-bottom: 8px; }
-    @media (max-width: 640px) { form { flex-wrap: wrap; } #url { flex-basis: 100%; } #target, #go { height: 46px; } }
+    @media (max-width: 640px) { form { flex-wrap: wrap; } #url { flex-basis: 100%; } #target, #vlang, #go { height: 46px; } }
 
     .status { min-height: 24px; text-align: center; color: var(--muted); margin-bottom: 20px; }
     .status.error { color: #ff7b8a; }
@@ -264,6 +264,15 @@
     <div id="step1Box">
     <form id="form">
       <input id="url" type="text" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off" required />
+      <select id="vlang" title="Langue parlée dans la vidéo (Auto : devinée d'après le titre)">
+        <option value="">Langue : auto</option>
+        <option value="fr">Français</option>
+        <option value="en">English</option>
+        <option value="es">Español</option>
+        <option value="pt">Português</option>
+        <option value="de">Deutsch</option>
+        <option value="it">Italiano</option>
+      </select>
       <select id="target" title="Durée visée pour chaque extrait" hidden style="display:none">
         <option value="40">Durée : auto</option>
         <option value="30">30 s</option>
@@ -1036,7 +1045,7 @@
       goStep(1);
       resetMaker();
       try {
-        const data = await post('/api/analyze', { url, target: targetSeconds() });
+        const data = await post('/api/analyze', { url, target: targetSeconds(), lang: $('vlang').value });
         setStatus(`${data.clips.length} moments trouvés${data.mode === 'simple' ? ' (analyse simple, sans IA)' : ''}.`);
         render(data);
       } catch (err) {
