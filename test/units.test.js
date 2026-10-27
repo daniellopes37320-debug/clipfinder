@@ -62,3 +62,13 @@ test('sanitizeSamples : rejette les données absurdes', () => {
   assert.ok(!sanitizeSamples(null) || sanitizeSamples(null).length === 0);
   assert.ok(FRAMINGS.includes('face'));
 });
+
+import { normalizeTranscript } from '../analysis.js';
+test('sous-titres auto : les répétitions sont retirées', () => {
+  const r = normalizeTranscript([
+    { offset: 0, duration: 2, text: "WHOAa, it's also" },
+    { offset: 2, duration: 2, text: "WHOAa, it's also" },
+    { offset: 4, duration: 2, text: "it's also a little loose" },
+  ]);
+  assert.equal(r.map((x) => x.text).join(' | '), "WHOAa, it's also | a little loose");
+});
