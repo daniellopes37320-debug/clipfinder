@@ -9,6 +9,7 @@ import { ffmpegAvailable } from './reframe.js';
 import { createSettings } from './settings.js';
 import { cleanOutput } from './cleanup.js';
 import { extractVideoId, fetchSegments, analyzeSegments } from './analysis.js';
+import { detectLang, LANGS } from './lang.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -110,10 +111,13 @@ app.post('/api/analyze', async (req, res) => {
     const videoId = extractVideoId(req.body?.url);
     if (!videoId) return res.status(400).json({ error: "Ce lien YouTube n'est pas valide." });
 
-    const infoPromise = fetchVideoInfo(videoId);
+    const meta = await fetchVideoInfo(videoId);
+    // Langue de la vidéo : celle choisie sur le site, sinon devinée d'après son titre.
+    const chosen = String(req.body?.lang || '');
+    const preferLang = LANGS.includes(chosen) ? chosen : detectLang(meta.videoTitle, { min: 3 });
     let segments;
     try {
-      segments = await fetchSegments(videoId);
+      segments = await fetchSegments(videoId, { preferLang });
     } catch (e) {
       if (e.code === 'NO_TRANSCRIPT') {
         return res.status(422).json({
@@ -131,7 +135,7 @@ app.post('/api/analyze', async (req, res) => {
       targetSeconds: req.body?.target,
       apiKey: cfg.momentsKey,
       model: cfg.claudeModel,
-      meta: await infoPromise,
+      meta,
       titleAI: cfg.titleAI,
     });
     res.json({

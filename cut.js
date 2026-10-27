@@ -13,17 +13,12 @@ import { probe, makeShort, ffmpegAvailable, FRAMINGS, sanitizeSamples, findLogo 
 import { buildAss, parseSubtitles } from './captions.js';
 import { audioEnergy, refineClips, clipsFromAudio } from './audio.js';
 import { finalizeClips, relabel, analyzeSegments } from './analysis.js';
+import { json } from './http.js';
 
 const VIDEO_EXT = new Set(['.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v']);
 const MAX_CLIP_SECONDS = 120;
 // Taille maximale d'un fichier envoyé (réglable avec MAX_UPLOAD_GB dans .env, 4 Go par défaut).
 const MAX_UPLOAD_BYTES = (Number(process.env.MAX_UPLOAD_GB) > 0 ? Number(process.env.MAX_UPLOAD_GB) : 4) * 1024 ** 3;
-
-function json(res, code, obj) {
-  res.statusCode = code;
-  res.setHeader('content-type', 'application/json; charset=utf-8');
-  res.end(JSON.stringify(obj));
-}
 
 // getSegments(clé) -> transcription mise en cache par le serveur (ou undefined)
 // setSegments(clé, segments) -> la garde en mémoire (sous-titres importés avec un fichier)

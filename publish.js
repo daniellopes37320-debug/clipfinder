@@ -10,23 +10,12 @@ import path from 'node:path';
 import http from 'node:http';
 import https from 'node:https';
 import { randomBytes } from 'node:crypto';
+import { json, redirect } from './http.js';
 
 const SCOPES = [
   'https://www.googleapis.com/auth/youtube.upload', // envoyer des vidéos
   'https://www.googleapis.com/auth/youtube.readonly', // lire le nom de la chaîne (affiché sur le site)
 ].join(' ');
-
-function json(res, code, obj) {
-  res.statusCode = code;
-  res.setHeader('content-type', 'application/json; charset=utf-8');
-  res.end(JSON.stringify(obj));
-}
-
-function redirect(res, location) {
-  res.statusCode = 302;
-  res.setHeader('location', location);
-  res.end();
-}
 
 const FRIENDLY = {
   quotaExceeded: "Le quota quotidien de l'API YouTube est atteint. Réessayez demain (ou demandez une hausse de quota dans Google Cloud).",

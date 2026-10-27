@@ -14,13 +14,16 @@ const SETS = Object.fromEntries(Object.entries(WORDS).map(([k, v]) => [k, new Se
 export const LANG_NAMES = { fr: 'français', en: 'anglais', es: 'espagnol', pt: 'portugais', de: 'allemand', it: 'italien' };
 
 // Renvoie 'fr' | 'en' | 'es' | 'pt' | 'de' | 'it', ou null si le texte est trop court ou ambigu.
-export function detectLang(text) {
+export const LANGS = Object.keys(LANG_NAMES);
+
+// min : nombre minimal de mots (6 pour un texte parlé ; 3 suffit pour un titre de vidéo).
+export function detectLang(text, { min = 6 } = {}) {
   const tokens = String(text || '')
     .toLowerCase()
     .replace(/[’‘]/g, "'")
     .split(/[^\p{L}']+/u)
     .filter(Boolean);
-  if (tokens.length < 6) return null;
+  if (tokens.length < min) return null;
   const score = {};
   for (const [lang, set] of Object.entries(SETS)) score[lang] = tokens.reduce((n, t) => n + (set.has(t) ? 1 : 0), 0);
   const ranked = Object.entries(score).sort((a, b) => b[1] - a[1]);

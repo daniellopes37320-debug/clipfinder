@@ -1,7 +1,7 @@
 // Analyse d'une vidéo YouTube : transcription -> meilleurs moments.
 // Partagé par le serveur (server.js) et le mode automatique (auto.js).
 import { enhanceClips } from './titles.js';
-import { detectLang } from './lang.js';
+import { detectLang, LANGS } from './lang.js';
 import { findClipsSimple } from './heuristic.js';
 import { topKeywords } from './keywords.js';
 import { buildMetadata } from './meta.js';
@@ -52,6 +52,7 @@ export function normalizeTranscript(raw) {
       start: (Number(r.offset) || 0) * k,
       dur: (Number(r.duration) || 0) * k,
       text: String(r.text || '')
+        .replace(/(?:&(?:amp;)?gt;|>){2,}\s*/g, ' ') // « >> » : changement de locuteur dans les sous-titres automatiques
         .replace(/&amp;#39;|&#39;/g, "'")
         .replace(/&amp;/g, '&')
         .replace(/&quot;/g, '"')
@@ -89,7 +90,7 @@ const TRANSCRIPT_TIMEOUT_MS = 45_000;
 const noTranscript = (msg) => Object.assign(new Error(msg), { code: 'NO_TRANSCRIPT' });
 
 // fetcher(videoId, config) -> segments bruts ; remplaçable (tests). Par défaut : la bibliothèque youtube-transcript.
-export async function fetchSegments(videoId, { fetcher = null, timeoutMs = TRANSCRIPT_TIMEOUT_MS } = {}) {
+export async function fetchSegments(videoId, { fetcher = null, timeoutMs = TRANSCRIPT_TIMEOUT_MS, preferLang = null } = {}) {
   let raw;
   let timer;
   // La bibliothèque n'a pas de délai d'attente : sans cette limite, une réponse qui ne vient pas bloque l'analyse.
@@ -102,9 +103,20 @@ export async function fetchSegments(videoId, { fetcher = null, timeoutMs = TRANS
       const { YoutubeTranscript } = await import('youtube-transcript');
       get = (id, cfg) => YoutubeTranscript.fetchTranscript(id, cfg);
     }
+    const sample = (x) => x.slice(0, 80).map((y) => y.text).join(' ');
+    // Langue de la vidéo connue (choisie par la personne, ou devinée d'après le titre) : on la demande en premier,
+    // car la piste « par défaut » de YouTube peut être une traduction (une vidéo française avec sous-titres anglais).
+    if (LANGS.includes(preferLang)) {
+      try {
+        const p = await get(videoId, { lang: preferLang });
+        const found = detectLang(sample(p));
+        if (Array.isArray(p) && p.length && (found === preferLang || found === null)) return p;
+      } catch {
+        /* pas de piste dans cette langue : on prend la piste par défaut */
+      }
+    }
     let r = await get(videoId);
     // La piste par défaut peut être une autre langue (doublage, traduction auto) : on cherche la langue parlée.
-    const sample = (x) => x.slice(0, 80).map((y) => y.text).join(' ');
     if (Array.isArray(r) && r.length && !detectLang(sample(r))) {
       for (const lang of ['en', 'fr', 'es', 'pt', 'de', 'it']) {
         try {

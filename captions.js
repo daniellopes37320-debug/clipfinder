@@ -131,6 +131,7 @@ export function parseSubtitles(text) {
       .replace(/<[^>]*>/g, '') // <i>, <c>, <00:00:01.000>
       .replace(/\{[^}]*\}/g, '') // {\an8}
       .replace(/&nbsp;/g, ' ')
+      .replace(/(?:&gt;|>){2,}\s*/g, ' ') // « >> » : changement de locuteur
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&amp;/g, '&')

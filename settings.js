@@ -1,6 +1,7 @@
 // Réglages modifiables depuis l'onglet « Connexions » : clés IA, modèle, choix de l'IA des titres, identifiants Google.
 // Tout est enregistré dans le fichier .env (jamais renvoyé en clair au navigateur : seulement un aperçu masqué).
 import { saveEnv } from './env.js';
+import { json } from './http.js';
 import { DEFAULT_GEMINI_MODEL } from './titles.js';
 
 const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-5-5';
@@ -84,12 +85,6 @@ export async function testProvider(provider, { apiKey, model }) {
 }
 
 export function createSettings({ envFile, port, onChange = () => {} }) {
-  const json = (res, code, obj) => {
-    res.statusCode = code;
-    res.setHeader('content-type', 'application/json; charset=utf-8');
-    res.end(JSON.stringify(obj));
-  };
-
   function view() {
     const c = currentConfig();
     return {
