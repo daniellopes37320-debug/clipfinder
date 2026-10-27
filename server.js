@@ -36,7 +36,8 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.json({ limit: '1mb' }));
+// 4 Mo : un fichier de sous-titres (.srt/.vtt) importé avec une vidéo peut dépasser 1 Mo.
+app.use(express.json({ limit: '4mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Transcriptions gardées en mémoire : utilisées pour les sous-titres incrustés.
@@ -146,6 +147,13 @@ app.post('/api/analyze', async (req, res) => {
     console.error(e);
     res.status(500).json({ error: e.message || 'Erreur inattendue.' });
   }
+});
+
+// Erreurs d'Express (JSON invalide, corps trop gros…) : réponse JSON lisible par le site, sans trace technique.
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  const status = err.status >= 400 && err.status < 500 ? err.status : 500;
+  res.status(status).json({ error: status === 413 ? 'Requête trop volumineuse.' : status < 500 ? 'Requête invalide.' : 'Erreur inattendue.' });
 });
 
 const server = app.listen(PORT, HOST, () => {

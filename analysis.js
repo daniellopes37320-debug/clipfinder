@@ -8,15 +8,19 @@ import { buildMetadata } from './meta.js';
 
 export function extractVideoId(input = '') {
   const s = String(input).trim();
-  if (/^[\w-]{11}$/.test(s)) return s;
+  const ID = /^[\w-]{11}$/;
+  if (ID.test(s)) return s;
   try {
     const u = new URL(s);
-    if (u.hostname === 'youtu.be') return u.pathname.slice(1, 12);
-    if (u.hostname.endsWith('youtube.com')) {
-      if (u.searchParams.get('v')) return u.searchParams.get('v');
-      const m = u.pathname.match(/\/(embed|shorts|live|v)\/([\w-]{11})/);
-      if (m) return m[2];
+    const host = u.hostname.toLowerCase();
+    let id = null;
+    if (host === 'youtu.be') id = u.pathname.slice(1, 12);
+    else if (host === 'youtube.com' || host.endsWith('.youtube.com')) {
+      id = u.searchParams.get('v');
+      if (!id) id = (u.pathname.match(/\/(?:embed|shorts|live|v)\/([\w-]{11})/) || [])[1];
     }
+    // L'identifiant finit dans des liens et des requêtes : on n'accepte que le format YouTube exact.
+    if (id && ID.test(id)) return id;
   } catch {
     /* pas une URL */
   }
@@ -43,7 +47,7 @@ function median(arr) {
 export function normalizeTranscript(raw) {
   const unitMs = median(raw.map((r) => Number(r.duration) || 0)) > 100;
   const k = unitMs ? 1 / 1000 : 1;
-  return raw
+  const items = raw
     .map((r) => ({
       start: (Number(r.offset) || 0) * k,
       dur: (Number(r.duration) || 0) * k,
@@ -55,35 +59,79 @@ export function normalizeTranscript(raw) {
         .trim(),
     }))
     .filter((r) => r.text);
+  return dedupeSegments(items);
+}
+
+// Les sous-titres automatiques répètent souvent la fin de la ligne précédente : on retire ces doublons.
+export function dedupeSegments(items) {
+  const out = [];
+  const norm = (w) => w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, '');
+  for (const it of items) {
+    const prev = out[out.length - 1];
+    if (!prev) { out.push({ ...it }); continue; }
+    const pw = prev.text.split(' ');
+    let words = it.text.split(' ');
+    // Recouvrement : début de la ligne = fin de la précédente.
+    const max = Math.min(pw.length, words.length);
+    let cut = 0;
+    for (let n = max; n >= 1; n--) {
+      if (pw.slice(-n).map(norm).join(' ') === words.slice(0, n).map(norm).join(' ')) { cut = n; break; }
+    }
+    words = words.slice(cut);
+    if (!words.length) { prev.dur = Math.max(prev.dur, it.start + it.dur - prev.start); continue; }
+    out.push({ ...it, text: words.join(' ') });
+  }
+  return out;
 }
 
 // Récupère la transcription (sous-titres). Lève une erreur de code NO_TRANSCRIPT si elle est introuvable.
-export async function fetchSegments(videoId) {
+const TRANSCRIPT_TIMEOUT_MS = 45_000;
+const noTranscript = (msg) => Object.assign(new Error(msg), { code: 'NO_TRANSCRIPT' });
+
+// fetcher(videoId, config) -> segments bruts ; remplaçable (tests). Par défaut : la bibliothèque youtube-transcript.
+export async function fetchSegments(videoId, { fetcher = null, timeoutMs = TRANSCRIPT_TIMEOUT_MS } = {}) {
   let raw;
-  try {
-    const { YoutubeTranscript } = await import('youtube-transcript');
-    raw = await YoutubeTranscript.fetchTranscript(videoId);
+  let timer;
+  // La bibliothèque n'a pas de délai d'attente : sans cette limite, une réponse qui ne vient pas bloque l'analyse.
+  const limit = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('délai dépassé')), timeoutMs);
+  });
+  const load = async () => {
+    let get = fetcher;
+    if (!get) {
+      const { YoutubeTranscript } = await import('youtube-transcript');
+      get = (id, cfg) => YoutubeTranscript.fetchTranscript(id, cfg);
+    }
+    let r = await get(videoId);
     // La piste par défaut peut être une autre langue (doublage, traduction auto) : on cherche la langue parlée.
-    const sample = (r) => r.slice(0, 80).map((x) => x.text).join(' ');
-    if (!detectLang(sample(raw))) {
+    const sample = (x) => x.slice(0, 80).map((y) => y.text).join(' ');
+    if (Array.isArray(r) && r.length && !detectLang(sample(r))) {
       for (const lang of ['en', 'fr', 'es', 'pt', 'de', 'it']) {
         try {
-          const alt = await YoutubeTranscript.fetchTranscript(videoId, { lang });
-          if (alt?.length && detectLang(sample(alt)) === lang) { raw = alt; break; }
-        } catch { /* langue indisponible, on essaie la suivante */ }
+          const alt = await get(videoId, { lang });
+          if (alt?.length && detectLang(sample(alt)) === lang) {
+            r = alt;
+            break;
+          }
+        } catch {
+          /* langue indisponible, on essaie la suivante */
+        }
       }
     }
-  } catch (e) {
-    const x = new Error("Impossible de récupérer la transcription. La vidéo n'a peut-être pas de sous-titres, ou elle est privée.");
-    x.code = 'NO_TRANSCRIPT';
-    throw x;
+    return r;
+  };
+  try {
+    raw = await Promise.race([load(), limit]);
+  } catch {
+    throw noTranscript("Impossible de récupérer la transcription. La vidéo n'a peut-être pas de sous-titres, ou elle est privée.");
+  } finally {
+    clearTimeout(timer);
   }
-  if (!raw?.length) {
-    const x = new Error('Cette vidéo ne contient aucune transcription.');
-    x.code = 'NO_TRANSCRIPT';
-    throw x;
-  }
-  return normalizeTranscript(raw);
+  if (!Array.isArray(raw) || !raw.length) throw noTranscript('Cette vidéo ne contient aucune transcription.');
+  const segments = normalizeTranscript(raw);
+  // Des lignes toutes vides ne donnent rien à analyser : sans ce contrôle, l'analyse planterait plus loin.
+  if (!segments.length) throw noTranscript('Cette vidéo ne contient aucune transcription exploitable.');
+  return segments;
 }
 
 // Regroupe en lignes d'environ 8 secondes pour alléger le prompt.
@@ -230,6 +278,7 @@ export function finalizeClips(rawClips, { videoId, totalSeconds, segments, minDu
 
 // Analyse complète à partir de la transcription déjà récupérée.
 export async function analyzeSegments({ segments, videoId, targetSeconds = 40, apiKey, model, energy = null, meta = {}, titleAI = null }) {
+  if (!Array.isArray(segments) || !segments.length) throw new Error('Aucun texte à analyser.');
   const last = segments[segments.length - 1];
   const totalSeconds = last.start + last.dur;
   const target = Math.min(90, Math.max(15, Number(targetSeconds) || 40));
@@ -244,10 +293,12 @@ export async function analyzeSegments({ segments, videoId, targetSeconds = 40, a
   if (apiKey) {
     try {
       result = await askClaude({ apiKey, model, transcriptText, totalSeconds, targetSeconds: target });
+      if (!Array.isArray(result?.clips)) throw new Error('Réponse du modèle sans liste de clips.');
     } catch (e) {
       // Claude indisponible (réseau, quota, délai dépassé) : on bascule sur l'analyse gratuite au lieu d'échouer.
       console.warn('Analyse Claude impossible, repli sur l\'analyse simple :', e.message);
       mode = 'simple';
+      result = null; // une réponse inexploitable ne doit pas empêcher l'analyse simple
       notice = 'Analyse IA indisponible (' + (e.name === 'TimeoutError' ? 'délai dépassé' : e.message.slice(0, 120)) + ') : analyse simple utilisée.';
     }
   }

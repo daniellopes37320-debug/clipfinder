@@ -54,6 +54,9 @@ function googleError(status, bodyText) {
 }
 
 // Envoie le fichier avec un Content-Length explicite (requis par l'envoi "resumable").
+const API_TIMEOUT_MS = 30_000; // délai des appels Google (hors envoi du fichier)
+const UPLOAD_IDLE_MS = 120_000; // l'envoi du fichier est abandonné s'il ne progresse plus pendant 2 minutes
+
 function putFile(url, file, size) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
@@ -68,7 +71,8 @@ function putFile(url, file, size) {
       },
     );
     req.on('error', reject);
-    fs.createReadStream(file).on('error', reject).pipe(req);
+    req.setTimeout(UPLOAD_IDLE_MS, () => req.destroy(new Error("L'envoi vers YouTube ne répond plus : réessayez.")));
+    fs.createReadStream(file).on('error', (e) => req.destroy(e)).pipe(req);
   });
 }
 
@@ -99,6 +103,7 @@ export function createPublisher({ baseDir, outputDir, port, env = process.env })
   async function tokenRequest(params) {
     const r = await fetch(TOKEN_URL, {
       method: 'POST',
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, ...params }),
     });
@@ -137,7 +142,7 @@ export function createPublisher({ baseDir, outputDir, port, env = process.env })
   async function channelName() {
     if (channelCache && Date.now() - channelCache.at < 10 * 60_000) return channelCache.name;
     const token = await accessToken();
-    const r = await fetch(CHANNEL_URL, { headers: { authorization: `Bearer ${token}` } });
+    const r = await fetch(CHANNEL_URL, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(API_TIMEOUT_MS) });
     if (!r.ok) return null;
     const j = await r.json();
     const name = j?.items?.[0]?.snippet?.title || null;
@@ -222,9 +227,11 @@ export function createPublisher({ baseDir, outputDir, port, env = process.env })
       if (!/^short-[a-z0-9-]+\.mp4$/.test(String(name))) return json(res, 400, { error: 'Fichier inconnu.' });
       const file = path.join(outputDir, name);
       if (!fs.existsSync(file)) return json(res, 404, { error: 'Ce Short est introuvable dans le dossier output.' });
-      const t = String(title || '').trim().slice(0, 100);
+      // YouTube refuse « < » et « > » dans le titre et la description (ex. les « >> » des sous-titres) : erreur invalidTitle/invalidDescription.
+      const noAngle = (x) => String(x || '').replace(/[<>]/g, '');
+      const t = noAngle(title).replace(/\s+/g, ' ').trim().slice(0, 100);
       if (!t) return json(res, 400, { error: 'Le titre est obligatoire.' });
-      const d = String(description || '').slice(0, 4900);
+      const d = noAngle(description).slice(0, 4900);
       const priv = ['private', 'unlisted', 'public'].includes(privacy) ? privacy : 'private';
 
       const token = await accessToken();
@@ -233,6 +240,7 @@ export function createPublisher({ baseDir, outputDir, port, env = process.env })
       // 1) ouverture de la session d'envoi (titre, description, visibilité)
       const init = await fetch(`${UPLOAD_URL}?uploadType=resumable&part=snippet,status`, {
         method: 'POST',
+        signal: AbortSignal.timeout(API_TIMEOUT_MS),
         headers: {
           authorization: `Bearer ${token}`,
           'content-type': 'application/json; charset=UTF-8',
@@ -267,7 +275,8 @@ export function createPublisher({ baseDir, outputDir, port, env = process.env })
     } catch (e) {
       if (!e.status) console.error(e);
       const code = e.status === 401 ? 401 : e.reason === 'quotaExceeded' || e.reason === 'dailyLimitExceeded' ? 429 : 502;
-      json(res, code, { error: e.message || 'Erreur inattendue.' });
+      const msg = e.name === 'TimeoutError' ? 'Google ne répond pas : vérifiez votre connexion et réessayez.' : e.message;
+      json(res, code, { error: msg || 'Erreur inattendue.' });
     }
   }
 

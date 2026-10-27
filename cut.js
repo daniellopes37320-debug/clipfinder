@@ -33,16 +33,27 @@ export function createCutHandlers({ baseDir, getSegments = () => undefined, setS
   fs.mkdirSync(tmpDir, { recursive: true });
   fs.mkdirSync(outputDir, { recursive: true });
 
-  // Ménage au démarrage : les fichiers envoyés depuis plus de 24 h sont supprimés.
-  const now = Date.now();
-  for (const f of fs.readdirSync(tmpDir)) {
+  // Ménage : les fichiers envoyés depuis plus de 24 h sont supprimés, au démarrage puis toutes les heures
+  // (sinon des vidéos de plusieurs Go s'accumulent tant que le serveur reste ouvert).
+  const sweepTmp = () => {
+    const now = Date.now();
+    for (const f of fs.readdirSync(tmpDir)) {
+      try {
+        const p = path.join(tmpDir, f);
+        if (now - fs.statSync(p).mtimeMs > 24 * 3600 * 1000) fs.unlinkSync(p);
+      } catch {
+        /* on ignore */
+      }
+    }
+  };
+  sweepTmp();
+  setInterval(() => {
     try {
-      const p = path.join(tmpDir, f);
-      if (now - fs.statSync(p).mtimeMs > 24 * 3600 * 1000) fs.unlinkSync(p);
+      sweepTmp();
     } catch {
       /* on ignore */
     }
-  }
+  }, 3600 * 1000).unref();
 
   // Titres et infos des Shorts créés, gardés à côté des vidéos (pour l'onglet Historique).
   const metaFile = path.join(outputDir, 'history.json');
@@ -79,7 +90,10 @@ export function createCutHandlers({ baseDir, getSegments = () => undefined, setS
   }
 
   async function getEnergy(uploadId, file) {
-    if (!energyCache.has(uploadId)) energyCache.set(uploadId, await audioEnergy(file));
+    if (!energyCache.has(uploadId)) {
+      energyCache.set(uploadId, await audioEnergy(file));
+      if (energyCache.size > 10) energyCache.delete(energyCache.keys().next().value); // évite de garder en mémoire toutes les vidéos
+    }
     return energyCache.get(uploadId);
   }
 
@@ -131,6 +145,10 @@ export function createCutHandlers({ baseDir, getSegments = () => undefined, setS
     });
     req.on('error', () => abort(400, 'Envoi interrompu.'));
     req.on('aborted', () => abort(400, 'Envoi interrompu.'));
+    // 'aborted' est obsolète : 'close' sans corps complet signale aussi un envoi coupé (le fichier partiel est supprimé).
+    req.on('close', () => {
+      if (!req.complete) abort(400, 'Envoi interrompu.');
+    });
     ws.on('error', (e) => abort(500, "Impossible d'écrire le fichier : " + e.message));
     ws.on('finish', async () => {
       if (failed) return;
@@ -162,12 +180,17 @@ export function createCutHandlers({ baseDir, getSegments = () => undefined, setS
       if (!input) return json(res, 404, { error: 'Fichier introuvable (envoi expiré ?). Renvoyez la vidéo.' });
 
       const info = await probe(input);
+      if (!(info.duration > 0)) {
+        return json(res, 400, { error: "La durée de cette vidéo est illisible (fichier incomplet ?). Essayez un autre fichier." });
+      }
       if (s >= info.duration) {
         return json(res, 400, {
           error: `Ce fichier dure ${Math.round(info.duration)} s : l'extrait demandé commence après la fin. Est-ce bien la même vidéo ?`,
         });
       }
       const realEnd = Math.min(e, info.duration);
+      // Un extrait de moins d'une seconde (début collé à la fin de la vidéo) donnerait un fichier vide ou cassé.
+      if (realEnd - s < 1) return json(res, 400, { error: "Extrait trop court : il doit durer au moins 1 seconde dans cette vidéo." });
 
       // Sous-titres : on a besoin de la transcription de la vidéo YouTube analysée.
       const notes = [];
@@ -218,7 +241,7 @@ export function createCutHandlers({ baseDir, getSegments = () => undefined, setS
       const file = findUpload(uploadId);
       if (!file) return json(res, 404, { error: 'Fichier introuvable : renvoyez la vidéo.' });
       if (!Array.isArray(clips) || !clips.length) return json(res, 400, { error: 'Aucun extrait à ajuster.' });
-      const clean = clips.slice(0, 20).map((c) => ({
+      const clean = clips.slice(0, 20).filter((c) => c && typeof c === 'object').map((c) => ({
         ...c,
         start: Number(c.start) || 0,
         end: Number(c.end) || 0,

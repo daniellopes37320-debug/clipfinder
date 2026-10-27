@@ -23,7 +23,10 @@ const SPREAD_THRESHOLD = Number.isFinite(Number(process.env.AUTO_BLUR_THRESHOLD)
 const even = (n) => Math.max(2, 2 * Math.floor(n / 2));
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
-function run(cmd, args, { collect = false, cwd } = {}) {
+// Délai maximal d'une commande ffmpeg/ffprobe : sans lui, un fichier qui bloque ffmpeg bloquerait la requête pour toujours.
+const RUN_TIMEOUT_MS = 15 * 60 * 1000;
+
+export function run(cmd, args, { collect = false, cwd, timeoutMs = RUN_TIMEOUT_MS } = {}) {
   return new Promise((resolve, reject) => {
     let child;
     try {
@@ -33,6 +36,11 @@ function run(cmd, args, { collect = false, cwd } = {}) {
     }
     const out = [];
     let err = '';
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGKILL');
+    }, timeoutMs);
     child.stdout.on('data', (d) => {
       if (collect) out.push(d);
     });
@@ -40,6 +48,7 @@ function run(cmd, args, { collect = false, cwd } = {}) {
       err = (err + d).slice(-4000);
     });
     child.on('error', (e) => {
+      clearTimeout(timer);
       if (e.code === 'ENOENT') {
         const x = new Error(
           "ffmpeg n'est pas installé (ou pas trouvé). Installez-le avec : winget install Gyan.FFmpeg — puis fermez et rouvrez le terminal."
@@ -51,6 +60,8 @@ function run(cmd, args, { collect = false, cwd } = {}) {
       }
     });
     child.on('close', (code) => {
+      clearTimeout(timer);
+      if (timedOut) return reject(new Error('ffmpeg a été arrêté : traitement trop long (plus de ' + Math.round(timeoutMs / 60000) + ' min).'));
       if (code === 0) return resolve({ stdout: Buffer.concat(out), stderr: err });
       const tail = err.trim().split('\n').slice(-3).join(' ');
       reject(new Error(tail || `ffmpeg a échoué (code ${code}).`));
@@ -60,8 +71,8 @@ function run(cmd, args, { collect = false, cwd } = {}) {
 
 export async function ffmpegAvailable() {
   try {
-    await run(FFMPEG, ['-version']);
-    await run(FFPROBE, ['-version']);
+    await run(FFMPEG, ['-version'], { timeoutMs: 15000 });
+    await run(FFPROBE, ['-version'], { timeoutMs: 15000 });
     return true;
   } catch {
     return false;
@@ -72,9 +83,14 @@ export async function probe(file) {
   const { stdout } = await run(
     FFPROBE,
     ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height:format=duration', '-of', 'json', file],
-    { collect: true }
+    { collect: true, timeoutMs: 60000 }
   );
-  const j = JSON.parse(stdout.toString() || '{}');
+  let j;
+  try {
+    j = JSON.parse(stdout.toString() || '{}');
+  } catch {
+    throw new Error('Ce fichier ne contient pas de vidéo lisible.');
+  }
   const st = j.streams && j.streams[0];
   if (!st || !st.width || !st.height) throw new Error('Ce fichier ne contient pas de vidéo.');
   return { width: st.width, height: st.height, duration: Number(j.format && j.format.duration) || 0 };
@@ -498,7 +514,12 @@ export async function makeShort({ input, start, end, framing, outPath, info, sam
       }
     }
 
-    await run(FFMPEG, args, { cwd: assName ? workDir : undefined });
+    try {
+      await run(FFMPEG, args, { cwd: assName ? workDir : undefined });
+    } catch (e) {
+      fs.unlink(outPath, () => {}); // un fichier à moitié écrit apparaîtrait dans l'historique comme un Short cassé
+      throw e;
+    }
   } finally {
     if (assName) fs.unlink(path.join(workDir, assName), () => {});
   }
