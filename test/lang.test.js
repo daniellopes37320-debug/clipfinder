@@ -33,3 +33,26 @@ test('sous-titres automatiques répétés : pas de mots en double', () => {
   assert.equal((txt.match(/also/g) || []).length, 1);
   assert.ok(txt.includes('loose'));
 });
+
+import { normalizeTranscript, fetchSegments } from '../analysis.js';
+test('sous-titres : les « >> » de changement de locuteur sont retirés', () => {
+  const r = normalizeTranscript([{ offset: 0, duration: 2, text: '&gt;&gt; Look, nobody is looking at her' }, { offset: 2, duration: 2, text: '>> et toi' }]);
+  assert.deepEqual(r.map((x) => x.text), ['Look, nobody is looking at her', 'et toi']);
+});
+
+test('fetchSegments : vidéo française avec piste par défaut anglaise -> prend la piste française', async () => {
+  const mk = (t) => Array.from({ length: 12 }, (_, i) => ({ text: t, offset: i * 3, duration: 3 }));
+  const fr = mk("je pense que c'est une très bonne idée pour nous et pour les gens");
+  const en = mk('I think this is the best thing that you can do for the family and it was great');
+  const fetcher = async (id, cfg) => (cfg?.lang === 'fr' ? fr : cfg?.lang === 'en' ? en : en);
+  const segs = await fetchSegments('dQw4w9WgXcQ', { fetcher, preferLang: 'fr' });
+  assert.match(segs[0].text, /très bonne idée/);
+  // sans langue connue, la piste par défaut est gardée (comportement inchangé)
+  const def = await fetchSegments('dQw4w9WgXcQ', { fetcher });
+  assert.match(def[0].text, /best thing/);
+});
+
+test('detectLang : un titre court suffit avec min=3', () => {
+  assert.equal(detectLang('Voici pourquoi je pense que', { min: 3 }), 'fr');
+  assert.equal(detectLang('Voici pourquoi je pense que'), null);
+});
